@@ -8,7 +8,7 @@ category: General
 ## Install GUI in Ubuntu 
 
 **Install Minimal GUI (XFCE Core Only)**
-
+sdsad
 ```
 # Update base system
 sudo apt update && sudo apt upgrade -y
