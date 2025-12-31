@@ -274,6 +274,7 @@ func writeAppShell(path string) {
 	// 1. ADDED: tailwind darkMode: 'class'
 	// 2. ADDED: Script to transform Admonitions and Copy Buttons
 	// 3. ADDED: Search Component logic
+	// 4. UPDATE: Removed Sitemap link, added fixed Home link
 	const html = `<!DOCTYPE html>
 <html lang="en" class="light">
 <head>
@@ -364,12 +365,13 @@ func writeAppShell(path string) {
             </div>
 
             <nav v-else class="flex-1 overflow-y-auto p-3">
-                 <div class="mb-4">
-                    <router-link to="/sitemap" class="block px-2 py-1 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400">
-                        Index
+                 <div class="mb-1">
+                    <router-link to="/" class="block px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-200 flex items-center" 
+                        :class="$route.path === '/' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm border border-gray-100 dark:border-gray-700' : 'text-slate-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-slate-900 dark:hover:text-gray-200'">
+                        Home
                     </router-link>
                 </div>
-                <sidebar-item v-for="item in menu" :key="item.title" :item="item"></sidebar-item>
+                <sidebar-item v-for="item in menu" :key="item.title" :item="item" v-if="item.slug !== '/'"></sidebar-item>
             </nav>
         </aside>
 
@@ -542,7 +544,6 @@ func writeAppShell(path string) {
                         localStorage.setItem('theme', 'light');
                     }
                 };
-                // Init Dark Mode
                 if (isDark.value) document.documentElement.classList.add('dark');
 
                 // Search Logic
@@ -557,7 +558,6 @@ func writeAppShell(path string) {
                 fetch('db.json').then(res => res.json()).then(data => {
                     window.siteData = data;
                     menu.value = data.menu;
-                    // Flatten pages for search
                     allPagesList.value = Object.keys(data.pages).map(slug => ({
                         slug, ...data.pages[slug]
                     }));
