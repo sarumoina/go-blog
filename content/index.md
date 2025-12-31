@@ -1,23 +1,36 @@
-## This is the home page
+# Developer Documentation
+Welcome to the internal documentation portal. This Single Page Application (SPA) is built with **Go**, **Vue 3**, and **Tailwind CSS**.
 
+## Installation Guide
+You can install the necessary tools using standard package managers.
 
-## Introduction
-and this is main content
+### Prerequisite Checks
+Before starting, ensure you have the core dependencies.
 
-```php
+```bash
+# Check Go version
+go version
 
-<?php 
-    echo "hi"
-?>
+# Check Git status
+git status
 ```
 
-asdsadsdadsd
+```
+package main
 
+import (
+    "fmt"
+    "net/http"
+)
 
-### Step 1
+func handler(w http.ResponseWriter, r *http.Request) {
+    // This prints to the browser
+    fmt.Fprintf(w, "Welcome to the API, %s!", r.URL.Path[1:])
+}
 
-This is step 1 
-
-### This is step 2
-
-This is step 2
+func main() {
+    http.HandleFunc("/", handler)
+    fmt.Println("Server starting on :8080...")
+    http.ListenAndServe(":8080", nil)
+}
+```
