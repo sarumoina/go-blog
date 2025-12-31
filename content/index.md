@@ -1,3 +1,10 @@
+---
+title: Welcome to My Docs
+published on: 2025-01-01
+updated on: 2025-01-05
+category: General
+---
+
 # Developer Documentation
 Welcome to the internal documentation portal. This Single Page Application (SPA) is built with **Go**, **Vue 3**, and **Tailwind CSS**.
 
