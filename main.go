@@ -36,7 +36,6 @@ type PageData struct {
 	Title     string     `json:"title"`
 	Content   string     `json:"content"`
 	TOC       []TOCEntry `json:"toc"`
-	// New Metadata Fields
 	Published string     `json:"published"`
 	Updated   string     `json:"updated"`
 	Category  string     `json:"category"`
@@ -56,7 +55,7 @@ type TOCEntry struct {
 }
 
 func main() {
-	fmt.Println("--- BUILDING WITH FRONTMATTER ---")
+	fmt.Println("--- BUILDING FIXED SPA ---")
 
 	if _, err := os.Stat(InputDir); os.IsNotExist(err) {
 		fmt.Println("Error: 'content' folder missing.")
@@ -65,11 +64,10 @@ func main() {
 	os.RemoveAll(OutputDir)
 	os.Mkdir(OutputDir, 0755)
 
-	// Setup Goldmark with Meta extension
 	markdown := goldmark.New(
 		goldmark.WithExtensions(
 			extension.GFM,
-			meta.Meta, // <--- ENABLE FRONTMATTER
+			meta.Meta,
 			highlighting.NewHighlighting(highlighting.WithStyle("github")),
 		),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
@@ -86,7 +84,6 @@ func main() {
 		if d.IsDir() { return nil }
 		if filepath.Ext(path) != ".md" { return nil }
 
-		// Calculate Paths
 		relPath, _ := filepath.Rel(InputDir, path)
 		relPath = filepath.ToSlash(relPath)
 		filename := strings.TrimSuffix(filepath.Base(path), ".md")
@@ -102,18 +99,12 @@ func main() {
 			slug = "/" + filepath.ToSlash(filepath.Join(dir, filename))
 		}
 
-		// Read Source
 		source, _ := os.ReadFile(path)
-
-		// Parse Context (Metadata extraction happens here)
 		context := parser.NewContext()
 		reader := text.NewReader(source)
 		doc := markdown.Parser().Parse(reader, parser.WithContext(context))
 
-		// EXTRACT FRONTMATTER
 		metaData := meta.Get(context)
-		
-		// Helper to safely get string from interface map
 		getString := func(key string) string {
 			if val, ok := metaData[key]; ok {
 				return fmt.Sprintf("%v", val)
@@ -124,15 +115,12 @@ func main() {
 		published := getString("published on")
 		updated := getString("updated on")
 		category := getString("category")
-
-		// Fallback Title: Use frontmatter "title", else filename
 		title := getString("title")
 		if title == "" {
 			title = strings.Title(strings.ReplaceAll(filename, "-", " "))
 			if slug == "/" { title = "Home" }
 		}
 
-		// Extract TOC
 		var toc []TOCEntry
 		ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 			if !entering { return ast.WalkContinue, nil }
@@ -149,11 +137,9 @@ func main() {
 			return ast.WalkContinue, nil
 		})
 
-		// Render HTML
 		var buf bytes.Buffer
 		markdown.Renderer().Render(&buf, source, doc)
 
-		// Add to Pages
 		site.Pages[slug] = PageData{
 			Title:     title,
 			Content:   buf.String(),
@@ -163,7 +149,6 @@ func main() {
 			Category:  category,
 		}
 
-		// Add to Menu
 		parts := strings.Split(strings.TrimSuffix(relPath, ".md"), "/")
 		site.Menu = addToTree(site.Menu, parts, slug, title)
 
@@ -221,6 +206,7 @@ func addToTree(nodes []*MenuItem, parts []string, slug, finalTitle string) []*Me
 }
 
 func writeAppShell(path string) {
+	// Note: We use single quotes for the Vue templates below to avoid breaking the Go backticks.
 	const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -300,7 +286,7 @@ func writeAppShell(path string) {
         const { createApp, ref, computed, watch } = Vue;
         const { createRouter, createWebHashHistory, useRoute } = VueRouter;
 
-        // --- SIDEBAR ITEM ---
+        // --- SIDEBAR ITEM (Templates fixed to use single quotes) ---
         const SidebarItem = {
             name: 'SidebarItem',
             props: ['item'],
@@ -317,40 +303,34 @@ func writeAppShell(path string) {
                 }, { immediate: true });
                 return { isOpen, toggle: () => isOpen.value = !isOpen.value };
             },
-            template: `
-                <div class="mb-1 select-none">
-                    <div v-if="item.is_folder">
-                        <button @click="toggle" class="w-full flex items-center justify-between px-2 py-1.5 text-sm font-semibold text-slate-700 hover:bg-gray-100 rounded-md transition-colors">
-                            <div class="flex items-center"><svg class="w-4 h-4 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg><span>{{ item.title }}</span></div>
-                            <span class="text-gray-400 text-[10px] transform transition-transform duration-200" :class="isOpen ? 'rotate-90' : ''">▶</span>
-                        </button>
-                        <div v-if="isOpen" class="pl-2 mt-1 ml-2 border-l border-gray-200 space-y-0.5"><sidebar-item v-for="child in item.children" :key="child.title" :item="child"></sidebar-item></div>
-                    </div>
-                    <router-link v-else :to="item.slug" class="block px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-200 flex items-center" :class="$route.path === item.slug ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-slate-600 hover:bg-gray-100 hover:text-slate-900'">{{ item.title }}</router-link>
-                </div>`
+            template: '<div class="mb-1 select-none">' +
+                '<div v-if="item.is_folder">' +
+                    '<button @click="toggle" class="w-full flex items-center justify-between px-2 py-1.5 text-sm font-semibold text-slate-700 hover:bg-gray-100 rounded-md transition-colors">' +
+                        '<div class="flex items-center"><svg class="w-4 h-4 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg><span>{{ item.title }}</span></div>' +
+                        '<span class="text-gray-400 text-[10px] transform transition-transform duration-200" :class="isOpen ? \'rotate-90\' : \'\'">▶</span>' +
+                    '</button>' +
+                    '<div v-if="isOpen" class="pl-2 mt-1 ml-2 border-l border-gray-200 space-y-0.5"><sidebar-item v-for="child in item.children" :key="child.title" :item="child"></sidebar-item></div>' +
+                '</div>' +
+                '<router-link v-else :to="item.slug" class="block px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-200 flex items-center" :class="$route.path === item.slug ? \'bg-white text-blue-600 shadow-sm border border-gray-100\' : \'text-slate-600 hover:bg-gray-100 hover:text-slate-900\'">{{ item.title }}</router-link>' +
+            '</div>'
         };
 
-        // --- PAGE VIEW WITH METADATA ---
+        // --- PAGE VIEW (Templates fixed to use single quotes) ---
         const PageView = {
             props: ['data'],
-            template: `
-                <div>
-                    <div class="mb-6 border-b border-gray-100 pb-6">
-                        <div v-if="data.category" class="mb-3">
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
-                                {{ data.category }}
-                            </span>
-                        </div>
-                        <div class="flex items-center space-x-4 text-sm text-slate-400">
-                            <span v-if="data.published">Published: {{ data.published }}</span>
-                            <span v-if="data.published && data.updated">•</span>
-                            <span v-if="data.updated">Updated: {{ data.updated }}</span>
-                        </div>
-                    </div>
-
-                    <article class="prose prose-slate prose-lg max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline" v-html="data.content"></article>
-                </div>
-            `
+            template: '<div>' +
+                '<div class="mb-6 border-b border-gray-100 pb-6">' +
+                    '<div v-if="data.category" class="mb-3">' +
+                        '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{{ data.category }}</span>' +
+                    '</div>' +
+                    '<div class="flex items-center space-x-4 text-sm text-slate-400">' +
+                        '<span v-if="data.published">Published: {{ data.published }}</span>' +
+                        '<span v-if="data.published && data.updated">•</span>' +
+                        '<span v-if="data.updated">Updated: {{ data.updated }}</span>' +
+                    '</div>' +
+                '</div>' +
+                '<article class="prose prose-slate prose-lg max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline" v-html="data.content"></article>' +
+            '</div>'
         };
 
         const app = createApp({
