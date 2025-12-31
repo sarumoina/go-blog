@@ -7,8 +7,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -23,6 +25,7 @@ import (
 const (
 	InputDir  = "./content"
 	OutputDir = "./public"
+	BaseURL   = "https://mysite.com" // Update this for sitemap
 )
 
 type SiteData struct {
@@ -31,12 +34,13 @@ type SiteData struct {
 }
 
 type PageData struct {
-	Title     string     `json:"title"`
-	Content   string     `json:"content"`
-	TOC       []TOCEntry `json:"toc"`
-	Published string     `json:"published"`
-	Updated   string     `json:"updated"`
-	Category  string     `json:"category"`
+	Title       string     `json:"title"`
+	Content     string     `json:"content"`
+	TOC         []TOCEntry `json:"toc"`
+	Published   string     `json:"published"`
+	Updated     string     `json:"updated"`
+	Category    string     `json:"category"`
+	Description string     `json:"description"`
 }
 
 type MenuItem struct {
@@ -52,8 +56,10 @@ type TOCEntry struct {
 	Level int    `json:"level"`
 }
 
+var htmlTagRegex = regexp.MustCompile(`<[^>]*>`)
+
 func main() {
-	fmt.Println("--- BUILDING WITH DYNAMIC HTML TITLE ---")
+	fmt.Println("--- BUILDING FEATURE-PACKED SITE ---")
 
 	if _, err := os.Stat(InputDir); os.IsNotExist(err) {
 		fmt.Println("Error: 'content' folder missing.")
@@ -62,11 +68,13 @@ func main() {
 	os.RemoveAll(OutputDir)
 	os.Mkdir(OutputDir, 0755)
 
+	// Note: We use "dracula" style. In Dark mode it fits perfectly. 
+	// In Light mode, it still looks good as a contrast block.
 	markdown := goldmark.New(
 		goldmark.WithExtensions(
 			extension.GFM,
 			meta.New(meta.WithStoresInDocument()),
-			highlighting.NewHighlighting(highlighting.WithStyle("github")),
+			highlighting.NewHighlighting(highlighting.WithStyle("dracula")),
 		),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
 		goldmark.WithRendererOptions(html.WithHardWraps(), html.WithUnsafe()),
@@ -76,6 +84,7 @@ func main() {
 		Pages: make(map[string]PageData),
 		Menu:  []*MenuItem{},
 	}
+	var xmlUrls []string
 
 	err := filepath.WalkDir(InputDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil { return err }
@@ -119,6 +128,27 @@ func main() {
 			if slug == "/" { title = "Home" }
 		}
 
+		var description string
+		if desc := getString("description"); desc != "" {
+			description = desc
+		} else {
+			child := doc.FirstChild()
+			for child != nil {
+				if child.Kind() == ast.KindParagraph {
+					var buf bytes.Buffer
+					for c := child.FirstChild(); c != nil; c = c.NextSibling() {
+						if t, ok := c.(*ast.Text); ok {
+							buf.Write(t.Segment.Value(source))
+						}
+					}
+					description = string(buf.Bytes())
+					if len(description) > 160 { description = description[:157] + "..." }
+					break
+				}
+				child = child.NextSibling()
+			}
+		}
+
 		var toc []TOCEntry
 		ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 			if !entering { return ast.WalkContinue, nil }
@@ -139,17 +169,18 @@ func main() {
 		markdown.Renderer().Render(&buf, source, doc)
 
 		site.Pages[slug] = PageData{
-			Title:     title,
-			Content:   buf.String(),
-			TOC:       toc,
-			Published: published,
-			Updated:   updated,
-			Category:  category,
+			Title:       title,
+			Content:     buf.String(),
+			TOC:         toc,
+			Published:   published,
+			Updated:     updated,
+			Category:    category,
+			Description: description,
 		}
 
 		parts := strings.Split(strings.TrimSuffix(relPath, ".md"), "/")
 		site.Menu = addToTree(site.Menu, parts, slug, title)
-
+		xmlUrls = append(xmlUrls, slug)
 		return nil
 	})
 
@@ -158,9 +189,9 @@ func main() {
 		return
 	}
 
+	generateXMLSitemap(xmlUrls)
 	jsonBytes, _ := json.Marshal(site)
 	os.WriteFile(filepath.Join(OutputDir, "db.json"), jsonBytes, 0644)
-	
 	writeAppShell(filepath.Join(OutputDir, "index.html"))
 	fmt.Println("--- DONE ---")
 }
@@ -181,16 +212,10 @@ func addToTree(nodes []*MenuItem, parts []string, slug, finalTitle string) []*Me
 	if foundNode == nil {
 		title := strings.Title(strings.ReplaceAll(currentPart, "-", " "))
 		if isLast { title = finalTitle }
-		
-		newNode := &MenuItem{
-			Title:    title,
-			IsFolder: !isLast,
-			Children: []*MenuItem{},
-		}
+		newNode := &MenuItem{Title: title, IsFolder: !isLast, Children: []*MenuItem{}}
 		if isLast { newNode.Slug = slug }
 		nodes = append(nodes, newNode)
 		foundNode = newNode
-		
 		sort.Slice(nodes, func(i, j int) bool {
 			if nodes[i].IsFolder != nodes[j].IsFolder { return nodes[i].IsFolder }
 			return nodes[i].Title < nodes[j].Title
@@ -203,51 +228,140 @@ func addToTree(nodes []*MenuItem, parts []string, slug, finalTitle string) []*Me
 	return nodes
 }
 
+func generateXMLSitemap(slugs []string) {
+	var buf bytes.Buffer
+	buf.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
+	buf.WriteString(`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` + "\n")
+	today := time.Now().Format("2006-01-02")
+	for _, slug := range slugs {
+		fullUrl := BaseURL + "/#" + slug
+		if slug == "/" { fullUrl = BaseURL + "/" }
+		buf.WriteString("  <url>\n")
+		buf.WriteString(fmt.Sprintf("    <loc>%s</loc>\n", fullUrl))
+		buf.WriteString(fmt.Sprintf("    <lastmod>%s</lastmod>\n", today))
+		buf.WriteString("    <changefreq>weekly</changefreq>\n")
+		buf.WriteString("  </url>\n")
+	}
+	buf.WriteString(`</urlset>`)
+	os.WriteFile(filepath.Join(OutputDir, "sitemap.xml"), buf.Bytes(), 0644)
+}
+
 func writeAppShell(path string) {
-	// Added the document.title watcher in the script at the bottom
+	// 1. ADDED: tailwind darkMode: 'class'
+	// 2. ADDED: Script to transform Admonitions and Copy Buttons
+	// 3. ADDED: Search Component logic
 	const html = `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Docs</title>
+    <meta name="description" content="Documentation">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script>
-        tailwind.config = { theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'] } } } }
+        tailwind.config = { 
+            darkMode: 'class', // Enable class-based dark mode
+            theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'] } } } 
+        }
     </script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://unpkg.com/vue-router@4/dist/vue-router.global.prod.js"></script>
     <style>
-        .prose pre { background-color: #f6f8fa !important; color: #24292e !important; border-radius: 6px; }
-        .prose code { color: #d73a49; font-weight: 500; }
-        .prose pre code { color: inherit; font-weight: normal; }
+        /* CSS for Admonitions */
+        .admonition { border-left-width: 4px; padding: 1rem; margin-bottom: 1.5rem; border-radius: 0.375rem; background-color: #f9fafb; }
+        .dark .admonition { background-color: #1f2937; }
+        .admonition-title { font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; }
+        
+        .admonition-note { border-color: #3b82f6; } /* Blue */
+        .admonition-note .admonition-title { color: #2563eb; }
+        
+        .admonition-tip { border-color: #10b981; } /* Green */
+        .admonition-tip .admonition-title { color: #059669; }
+        
+        .admonition-warning { border-color: #f59e0b; } /* Orange */
+        .admonition-warning .admonition-title { color: #d97706; }
+        
+        .admonition-important { border-color: #8b5cf6; } /* Purple */
+        .admonition-important .admonition-title { color: #7c3aed; }
+        
+        .admonition-caution { border-color: #ef4444; } /* Red */
+        .admonition-caution .admonition-title { color: #dc2626; }
+
+        /* Dark mode typography adjustments */
+        .dark .prose { color: #d1d5db; }
+        .dark .prose h1, .dark .prose h2, .dark .prose h3, .dark .prose h4 { color: #f3f4f6; }
+        .dark .prose a { color: #60a5fa; }
+        .dark .prose strong { color: #f3f4f6; }
+        .dark .prose code { color: #fca5a5; }
         .prose h1:first-of-type { display: none; }
+        
+        /* Copy Button Styles */
+        .code-wrapper { position: relative; }
+        .copy-btn { 
+            position: absolute; top: 0.5rem; right: 0.5rem; 
+            padding: 0.25rem 0.5rem; font-size: 0.75rem; 
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); 
+            border-radius: 0.25rem; color: #fff; cursor: pointer; opacity: 0; transition: opacity 0.2s;
+        }
+        .code-wrapper:hover .copy-btn { opacity: 1; }
+
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .dark ::-webkit-scrollbar-thumb { background: #4b5563; }
         html { scroll-behavior: smooth; }
     </style>
 </head>
-<body class="bg-white text-slate-800 h-screen overflow-hidden flex antialiased">
+<body class="bg-white dark:bg-gray-900 text-slate-800 dark:text-gray-200 h-screen overflow-hidden flex antialiased transition-colors duration-200">
     <div id="app" class="w-full h-full flex relative">
 
-        <aside class="bg-gray-50 border-r border-gray-200 w-64 flex-shrink-0 flex flex-col transition-all duration-300 absolute md:relative z-20 h-full"
+        <aside class="bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 w-64 flex-shrink-0 flex flex-col transition-all duration-300 absolute md:relative z-20 h-full"
             :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full md:w-0 md:overflow-hidden md:border-none'">
-            <div class="p-5 border-b border-gray-200 flex justify-between items-center bg-white">
-                <span class="font-bold text-lg tracking-tight text-slate-900">Docs</span>
-                <button @click="toggleSidebar" class="md:hidden text-gray-500">✕</button>
+            <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800">
+                <router-link to="/" class="font-bold text-lg tracking-tight text-slate-900 dark:text-white">Docs</router-link>
+                <button @click="toggleSidebar" class="md:hidden text-gray-500 dark:text-gray-400">✕</button>
             </div>
-            <nav class="flex-1 overflow-y-auto p-3">
+            
+            <div class="p-3 border-b border-gray-200 dark:border-gray-700">
+                <input v-model="searchQuery" type="text" placeholder="Search pages..." 
+                    class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-400">
+            </div>
+
+            <div v-if="searchQuery" class="flex-1 overflow-y-auto p-3 bg-white dark:bg-gray-800">
+                <div v-if="filteredPages.length === 0" class="text-sm text-gray-500 text-center py-4">No results found.</div>
+                <ul v-else class="space-y-1">
+                    <li v-for="page in filteredPages" :key="page.slug">
+                        <router-link :to="page.slug" @click="searchQuery = ''" class="block px-2 py-1.5 text-sm text-slate-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700 hover:text-blue-600 rounded-md">
+                            <div class="font-medium">{{ page.title }}</div>
+                            <div class="text-xs text-gray-400 truncate">{{ page.slug }}</div>
+                        </router-link>
+                    </li>
+                </ul>
+            </div>
+
+            <nav v-else class="flex-1 overflow-y-auto p-3">
+                 <div class="mb-4">
+                    <router-link to="/sitemap" class="block px-2 py-1 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400">
+                        Index
+                    </router-link>
+                </div>
                 <sidebar-item v-for="item in menu" :key="item.title" :item="item"></sidebar-item>
             </nav>
         </aside>
 
-        <div class="flex-1 flex flex-col h-full overflow-hidden w-full relative bg-white">
-            <header class="h-14 border-b border-gray-100 flex items-center px-4 flex-shrink-0 bg-white/80 backdrop-blur-sm z-10">
-                <button @click="toggleSidebar" class="p-2 -ml-2 text-gray-400 hover:text-gray-700 rounded-md hover:bg-gray-100">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+        <div class="flex-1 flex flex-col h-full overflow-hidden w-full relative bg-white dark:bg-gray-900">
+            <header class="h-14 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between px-4 flex-shrink-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm z-10">
+                <div class="flex items-center">
+                    <button @click="toggleSidebar" class="p-2 -ml-2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                    </button>
+                    <div class="ml-4 font-medium text-slate-400 text-sm truncate">/ {{ currentPage.title }}</div>
+                </div>
+
+                <button @click="toggleDarkMode" class="p-2 text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-300 transition-colors">
+                    <span v-if="isDark">☀️</span>
+                    <span v-else>🌙</span>
                 </button>
-                <div class="ml-4 font-medium text-slate-400 text-sm truncate">/ {{ currentPage.title }}</div>
             </header>
 
             <div v-if="loading" class="flex-1 flex items-center justify-center">
@@ -259,17 +373,17 @@ func writeAppShell(path string) {
                     <div class="max-w-3xl mx-auto">
                         <router-view v-slot="{ Component }">
                             <transition name="fade" mode="out-in">
-                                <component :is="Component" :data="currentPage" />
+                                <component :is="Component" :data="currentPage" :menu="menu" />
                             </transition>
                         </router-view>
                     </div>
                 </main>
-                <aside class="hidden xl:block w-64 border-l border-gray-100 bg-white flex-shrink-0 overflow-y-auto p-8">
+                <aside v-if="currentPage.toc && currentPage.toc.length > 0" class="hidden xl:block w-64 border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 flex-shrink-0 overflow-y-auto p-8">
                     <div class="sticky top-0">
                         <h5 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">On this page</h5>
-                        <nav class="space-y-2 relative border-l border-gray-100 ml-1">
+                        <nav class="space-y-2 relative border-l border-gray-100 dark:border-gray-800 ml-1">
                             <a v-for="link in currentPage.toc" :key="link.id" @click.prevent="scrollToHeader(link.id)" href="#"
-                               class="block text-sm text-slate-500 hover:text-blue-600 transition-colors truncate cursor-pointer pl-4 -ml-px border-l-2 border-transparent hover:border-blue-500"
+                               class="block text-sm text-slate-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors truncate cursor-pointer pl-4 -ml-px border-l-2 border-transparent hover:border-blue-500"
                                :class="{ 'pl-8': link.level === 3 }">
                                {{ link.title }}
                             </a>
@@ -282,9 +396,10 @@ func writeAppShell(path string) {
     </div>
 
     <script>
-        const { createApp, ref, computed, watch } = Vue;
+        const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         const { createRouter, createWebHashHistory, useRoute } = VueRouter;
 
+        // --- SIDEBAR ITEM ---
         const SidebarItem = {
             name: 'SidebarItem',
             props: ['item'],
@@ -303,30 +418,84 @@ func writeAppShell(path string) {
             },
             template: '<div class="mb-1 select-none">' +
                 '<div v-if="item.is_folder">' +
-                    '<button @click="toggle" class="w-full flex items-center justify-between px-2 py-1.5 text-sm font-semibold text-slate-700 hover:bg-gray-100 rounded-md transition-colors">' +
+                    '<button @click="toggle" class="w-full flex items-center justify-between px-2 py-1.5 text-sm font-semibold text-slate-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors">' +
                         '<div class="flex items-center"><svg class="w-4 h-4 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg><span>{{ item.title }}</span></div>' +
                         '<span class="text-gray-400 text-[10px] transform transition-transform duration-200" :class="isOpen ? \'rotate-90\' : \'\'">▶</span>' +
                     '</button>' +
-                    '<div v-if="isOpen" class="pl-2 mt-1 ml-2 border-l border-gray-200 space-y-0.5"><sidebar-item v-for="child in item.children" :key="child.title" :item="child"></sidebar-item></div>' +
+                    '<div v-if="isOpen" class="pl-2 mt-1 ml-2 border-l border-gray-200 dark:border-gray-700 space-y-0.5"><sidebar-item v-for="child in item.children" :key="child.title" :item="child"></sidebar-item></div>' +
                 '</div>' +
-                '<router-link v-else :to="item.slug" class="block px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-200 flex items-center" :class="$route.path === item.slug ? \'bg-white text-blue-600 shadow-sm border border-gray-100\' : \'text-slate-600 hover:bg-gray-100 hover:text-slate-900\'">{{ item.title }}</router-link>' +
+                '<router-link v-else :to="item.slug" class="block px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-200 flex items-center" :class="$route.path === item.slug ? \'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm border border-gray-100 dark:border-gray-700\' : \'text-slate-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-slate-900 dark:hover:text-gray-200\'">{{ item.title }}</router-link>' +
             '</div>'
         };
 
+        // --- PAGE VIEW (With Admonition & Copy Logic) ---
         const PageView = {
             props: ['data'],
+            setup(props) {
+                // Post-process HTML for Admonitions
+                const processedContent = computed(() => {
+                    if (!props.data.content) return '';
+                    let html = props.data.content;
+                    
+                    // Regex for Admonitions: <blockquote><p>[!TYPE] ...</p></blockquote>
+                    const regex = /<blockquote>\s*<p>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*?)<\/p>\s*(.*?)<\/blockquote>/gs;
+                    
+                    html = html.replace(regex, (match, type, titleLine, body) => {
+                        const typeLower = type.toLowerCase();
+                        const title = titleLine.trim() || type;
+                        return '<div class="admonition admonition-' + typeLower + '">' +
+                               '<div class="admonition-title">' + title + '</div>' +
+                               '<div>' + body + '</div>' +
+                               '</div>';
+                    });
+                    return html;
+                });
+
+                // Add Copy Buttons after render
+                onMounted(() => injectCopyButtons());
+                watch(() => props.data.content, () => nextTick(injectCopyButtons));
+
+                function injectCopyButtons() {
+                    document.querySelectorAll('pre').forEach(pre => {
+                        if (pre.parentNode.classList.contains('code-wrapper')) return;
+                        
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'code-wrapper';
+                        pre.parentNode.insertBefore(wrapper, pre);
+                        wrapper.appendChild(pre);
+                        
+                        const btn = document.createElement('button');
+                        btn.className = 'copy-btn';
+                        btn.textContent = 'Copy';
+                        btn.onclick = () => {
+                            navigator.clipboard.writeText(pre.innerText).then(() => {
+                                btn.textContent = 'Copied!';
+                                setTimeout(() => btn.textContent = 'Copy', 2000);
+                            });
+                        };
+                        wrapper.appendChild(btn);
+                    });
+                }
+
+                return { processedContent };
+            },
             template: '<div>' +
-                '<h1 class="text-4xl font-bold text-slate-900 mb-4 tracking-tight">{{ data.title }}</h1>' +
-                '<div class="flex items-center flex-wrap gap-4 text-sm text-slate-500 mb-8 pb-6 border-b border-gray-100">' +
-                    '<span v-if="data.category" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">{{ data.category }}</span>' +
+                '<h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-4 tracking-tight">{{ data.title }}</h1>' +
+                '<div class="flex items-center flex-wrap gap-4 text-sm text-slate-500 dark:text-gray-400 mb-8 pb-6 border-b border-gray-100 dark:border-gray-800">' +
+                    '<span v-if="data.category" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200 border border-blue-100 dark:border-blue-800">{{ data.category }}</span>' +
                     '<div v-if="data.published || data.updated" class="flex items-center space-x-3 ml-1">' +
-                        '<span v-if="data.published">Published: <span class="text-slate-700 font-medium">{{ data.published }}</span></span>' +
-                        '<span v-if="data.published && data.updated" class="text-gray-300">•</span>' +
-                        '<span v-if="data.updated">Updated: <span class="text-slate-700 font-medium">{{ data.updated }}</span></span>' +
+                        '<span v-if="data.published">Published: <span class="text-slate-700 dark:text-gray-300 font-medium">{{ data.published }}</span></span>' +
+                        '<span v-if="data.published && data.updated" class="text-gray-300 dark:text-gray-600">•</span>' +
+                        '<span v-if="data.updated">Updated: <span class="text-slate-700 dark:text-gray-300 font-medium">{{ data.updated }}</span></span>' +
                     '</div>' +
                 '</div>' +
-                '<article class="prose prose-slate prose-lg max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline" v-html="data.content"></article>' +
+                '<article class="prose prose-slate dark:prose-invert prose-lg max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline" v-html="processedContent"></article>' +
             '</div>'
+        };
+
+        const SitemapView = {
+            props: ['menu'],
+            template: '<div><h1 class="text-4xl font-bold mb-8 dark:text-white">Site Index</h1><div class="grid grid-cols-1 md:grid-cols-2 gap-8"><div v-for="item in menu" :key="item.title"><h3 class="font-bold text-lg mb-2 text-slate-800 dark:text-gray-200">{{ item.title }}</h3><ul class="space-y-1"><li v-if="!item.is_folder"><router-link :to="item.slug" class="text-blue-600 dark:text-blue-400 hover:underline">{{ item.title }}</router-link></li><li v-else v-for="child in item.children" :key="child.title" class="ml-4 list-disc marker:text-slate-300 dark:marker:text-gray-600"><router-link :to="child.slug" class="text-blue-600 dark:text-blue-400 hover:underline">{{ child.title }}</router-link></li></ul></div></div></div>'
         };
 
         const app = createApp({
@@ -336,10 +505,38 @@ func writeAppShell(path string) {
                 const sidebarOpen = ref(window.innerWidth > 1024);
                 const route = useRoute();
                 const mainScroll = ref(null);
+                
+                // Dark Mode Logic
+                const isDark = ref(localStorage.getItem('theme') === 'dark');
+                const toggleDarkMode = () => {
+                    isDark.value = !isDark.value;
+                    if (isDark.value) {
+                        document.documentElement.classList.add('dark');
+                        localStorage.setItem('theme', 'dark');
+                    } else {
+                        document.documentElement.classList.remove('dark');
+                        localStorage.setItem('theme', 'light');
+                    }
+                };
+                // Init Dark Mode
+                if (isDark.value) document.documentElement.classList.add('dark');
+
+                // Search Logic
+                const searchQuery = ref('');
+                const allPagesList = ref([]);
+                const filteredPages = computed(() => {
+                    if (!searchQuery.value) return [];
+                    const q = searchQuery.value.toLowerCase();
+                    return allPagesList.value.filter(p => p.title.toLowerCase().includes(q));
+                });
 
                 fetch('db.json').then(res => res.json()).then(data => {
                     window.siteData = data;
                     menu.value = data.menu;
+                    // Flatten pages for search
+                    allPagesList.value = Object.keys(data.pages).map(slug => ({
+                        slug, ...data.pages[slug]
+                    }));
                     loading.value = false;
                 });
 
@@ -348,9 +545,10 @@ func writeAppShell(path string) {
                     return window.siteData.pages[route.path] || { title: '404', content: "<h1 class='text-red-500'>404 Not Found</h1>", toc: [] };
                 });
 
-                // --- NEW: Watch Page Title and Update HTML Title ---
-                watch(() => currentPage.value.title, (newTitle) => {
-                    document.title = newTitle ? newTitle : 'Docs';
+                watch(() => currentPage.value, (page) => {
+                    document.title = page.title ? page.title : 'Docs';
+                    const metaDesc = document.querySelector('meta[name="description"]');
+                    if (metaDesc) metaDesc.setAttribute("content", page.description || "Documentation");
                 });
 
                 watch(() => route.path, () => {
@@ -364,14 +562,14 @@ func writeAppShell(path string) {
                     if(el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 };
 
-                return { loading, menu, currentPage, sidebarOpen, toggleSidebar, mainScroll, scrollToHeader };
+                return { loading, menu, currentPage, sidebarOpen, toggleSidebar, mainScroll, scrollToHeader, isDark, toggleDarkMode, searchQuery, filteredPages };
             }
         });
 
         app.component('sidebar-item', SidebarItem);
         app.use(createRouter({
             history: createWebHashHistory(),
-            routes: [ { path: '/:pathMatch(.*)*', component: PageView } ]
+            routes: [ { path: '/sitemap', component: SitemapView }, { path: '/:pathMatch(.*)*', component: PageView } ]
         }));
         app.mount('#app');
     </script>
