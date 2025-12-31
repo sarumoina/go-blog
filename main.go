@@ -271,10 +271,10 @@ func generateXMLSitemap(slugs []string) {
 }
 
 func writeAppShell(path string) {
-	// Updates:
-	// 1. Removed visual "Index" link from sidebar.
-	// 2. Hardcoded "Home" link at the top.
-	// 3. Kept /sitemap route active in the background.
+	// FIX APPLIED:
+	// 1. Added 'filteredMenu' computed property to safely remove the Home link.
+	// 2. Updated HTML loop to use 'filteredMenu' instead of 'menu'.
+	// 3. Removed the conflicting 'v-if' from the HTML tag.
 	const html = `<!DOCTYPE html>
 <html lang="en" class="light">
 <head>
@@ -359,7 +359,7 @@ func writeAppShell(path string) {
                     </router-link>
                 </div>
                 
-                <sidebar-item v-for="item in menu" :key="item.title" :item="item" v-if="item.slug !== '/'"></sidebar-item>
+                <sidebar-item v-for="item in filteredMenu" :key="item.title" :item="item"></sidebar-item>
             </nav>
         </aside>
 
@@ -508,6 +508,12 @@ func writeAppShell(path string) {
                 const route = useRoute();
                 const mainScroll = ref(null);
                 const isDark = ref(localStorage.getItem('theme') === 'dark');
+                
+                // Computed property to filter out Home link safely
+                const filteredMenu = computed(() => {
+                    return menu.value.filter(item => item.slug !== '/');
+                });
+
                 const toggleDarkMode = () => {
                     isDark.value = !isDark.value;
                     if (isDark.value) {
@@ -552,12 +558,11 @@ func writeAppShell(path string) {
                     const el = document.getElementById(id);
                     if(el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 };
-                return { loading, menu, currentPage, sidebarOpen, toggleSidebar, mainScroll, scrollToHeader, isDark, toggleDarkMode, searchQuery, filteredPages };
+                return { loading, menu, filteredMenu, currentPage, sidebarOpen, toggleSidebar, mainScroll, scrollToHeader, isDark, toggleDarkMode, searchQuery, filteredPages };
             }
         });
 
         app.component('sidebar-item', SidebarItem);
-        // Kept SitemapView in routes so the page is still accessible if you browse to #/sitemap
         app.use(createRouter({
             history: createWebHashHistory(),
             routes: [ { path: '/sitemap', component: SitemapView }, { path: '/:pathMatch(.*)*', component: PageView } ]
