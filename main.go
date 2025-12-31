@@ -59,7 +59,7 @@ type TOCEntry struct {
 var htmlTagRegex = regexp.MustCompile(`<[^>]*>`)
 
 func main() {
-	fmt.Println("--- BUILDING SITE (Fixed Nav & Layout) ---")
+	fmt.Println("--- BUILDING SITE (Collapsible Sidebar + Fixes) ---")
 
 	if _, err := os.Stat(InputDir); os.IsNotExist(err) {
 		fmt.Println("Error: 'content' folder missing.")
@@ -113,6 +113,10 @@ func main() {
 		}
 
 		source, _ := os.ReadFile(path)
+
+		// Manual Shortcode
+		source = bytes.ReplaceAll(source, []byte(":::gap:::"), []byte(`<div class="h-24 w-full"></div>`))
+
 		context := parser.NewContext()
 		doc := markdown.Parser().Parse(text.NewReader(source), parser.WithContext(context))
 
@@ -190,8 +194,6 @@ func main() {
 			Description: description,
 		}
 
-		// Only add to dynamic menu if it is NOT the home page
-		// This allows us to hardcode Home at the top in Vue
 		if slug != "/" {
 			parts := strings.Split(strings.TrimSuffix(relPath, ".md"), "/")
 			site.Menu = addToTree(site.Menu, parts, slug, title)
@@ -221,7 +223,6 @@ func addToTree(nodes []*MenuItem, parts []string, slug, finalTitle string) []*Me
 	isLast := len(parts) == 1
 	var foundNode *MenuItem
 
-	// Normalize title for folder comparison
 	folderTitle := strings.Title(strings.ReplaceAll(currentPart, "-", " "))
 
 	for _, node := range nodes {
@@ -243,7 +244,6 @@ func addToTree(nodes []*MenuItem, parts []string, slug, finalTitle string) []*Me
 		nodes = append(nodes, newNode)
 		foundNode = newNode
 		sort.Slice(nodes, func(i, j int) bool {
-			// Sort Folders First, then Files
 			if nodes[i].IsFolder != nodes[j].IsFolder {
 				return nodes[i].IsFolder
 			}
@@ -415,32 +415,52 @@ func writeAppShell(path string) {
         const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         const { createRouter, createWebHashHistory, useRoute } = VueRouter;
 
+        // FIXED: Using v-if="is_folder" and v-if="!is_folder" to separate elements completely
+        // This avoids Vue Compiler Error 30 (v-else issue with text nodes)
         const SidebarItem = {
             name: 'SidebarItem',
             props: ['item'],
             setup(props) {
                 const route = useRoute();
+                // COLLAPSIBLE LOGIC restored
                 const isOpen = ref(false);
+                
+                // Helper to check for active children
                 const hasActiveChild = (item, currentPath) => {
                     if (item.slug === currentPath) return true;
                     if (item.children) return item.children.some(child => hasActiveChild(child, currentPath));
                     return false;
                 };
+
+                // Watch route to AUTO-OPEN this folder if active
                 watch(() => route.path, (newPath) => {
-                    if (props.item.is_folder && hasActiveChild(props.item, newPath)) isOpen.value = true;
+                    if (props.item.is_folder && hasActiveChild(props.item, newPath)) {
+                        isOpen.value = true;
+                    }
                 }, { immediate: true });
-                return { isOpen, toggle: () => isOpen.value = !isOpen.value };
+
+                const toggle = () => isOpen.value = !isOpen.value;
+
+                return { isOpen, toggle };
             },
             template: '<div class="mb-1 select-none">' +
+                // FOLDER
                 '<div v-if="item.is_folder">' +
-                    // Added type="button" and click handler on the whole row for better collapsibility
                     '<button type="button" @click="toggle" class="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-slate-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-left">' +
                         '<div class="flex items-center"><span class="mr-2">📂</span><span>{{ item.title }}</span></div>' +
                         '<span class="text-gray-400 text-[10px] transform transition-transform duration-200" :class="isOpen ? \'rotate-90\' : \'\'">▶</span>' +
                     '</button>' +
-                    '<div v-if="isOpen" class="pl-3 mt-1 ml-1 border-l-2 border-gray-100 dark:border-gray-700 space-y-0.5"><sidebar-item v-for="child in item.children" :key="child.title" :item="child"></sidebar-item></div>' +
+                    '<div v-if="isOpen" class="pl-3 mt-1 ml-1 border-l-2 border-gray-100 dark:border-gray-700 space-y-0.5">' +
+                        '<sidebar-item v-for="child in item.children" :key="child.title" :item="child"></sidebar-item>' +
+                    '</div>' +
                 '</div>' +
-                '<router-link v-else :to="item.slug" class="block px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center" :class="$route.path === item.slug ? \'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm border border-gray-100 dark:border-gray-700\' : \'text-slate-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-slate-900 dark:hover:text-gray-200\'"><span class="mr-2">📄</span>{{ item.title }}</router-link>' +
+                
+                // FILE (Replaced v-else with v-if="!item.is_folder" to prevent blank page error)
+                '<div v-if="!item.is_folder">' +
+                    '<router-link :to="item.slug" class="block px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center" :class="$route.path === item.slug ? \'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm border border-gray-100 dark:border-gray-700\' : \'text-slate-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-slate-900 dark:hover:text-gray-200\'">' +
+                        '<span class="mr-2">📄</span>{{ item.title }}' +
+                    '</router-link>' +
+                '</div>' +
             '</div>'
         };
 

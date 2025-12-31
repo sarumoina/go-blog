@@ -1,5 +1,5 @@
 ---
-title: Welcome to My Docs
+title: Home
 published on: 2025-01-01
 updated on: 2025-01-05
 category: General

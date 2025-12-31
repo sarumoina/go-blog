@@ -135,32 +135,52 @@
         const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         const { createRouter, createWebHashHistory, useRoute } = VueRouter;
 
+        // FIXED: Using v-if="is_folder" and v-if="!is_folder" to separate elements completely
+        // This avoids Vue Compiler Error 30 (v-else issue with text nodes)
         const SidebarItem = {
             name: 'SidebarItem',
             props: ['item'],
             setup(props) {
                 const route = useRoute();
+                // COLLAPSIBLE LOGIC restored
                 const isOpen = ref(false);
+                
+                // Helper to check for active children
                 const hasActiveChild = (item, currentPath) => {
                     if (item.slug === currentPath) return true;
                     if (item.children) return item.children.some(child => hasActiveChild(child, currentPath));
                     return false;
                 };
+
+                // Watch route to AUTO-OPEN this folder if active
                 watch(() => route.path, (newPath) => {
-                    if (props.item.is_folder && hasActiveChild(props.item, newPath)) isOpen.value = true;
+                    if (props.item.is_folder && hasActiveChild(props.item, newPath)) {
+                        isOpen.value = true;
+                    }
                 }, { immediate: true });
-                return { isOpen, toggle: () => isOpen.value = !isOpen.value };
+
+                const toggle = () => isOpen.value = !isOpen.value;
+
+                return { isOpen, toggle };
             },
             template: '<div class="mb-1 select-none">' +
+                // FOLDER
                 '<div v-if="item.is_folder">' +
-                    // Added type="button" and click handler on the whole row for better collapsibility
                     '<button type="button" @click="toggle" class="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-slate-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-left">' +
                         '<div class="flex items-center"><span class="mr-2">📂</span><span>{{ item.title }}</span></div>' +
                         '<span class="text-gray-400 text-[10px] transform transition-transform duration-200" :class="isOpen ? \'rotate-90\' : \'\'">▶</span>' +
                     '</button>' +
-                    '<div v-if="isOpen" class="pl-3 mt-1 ml-1 border-l-2 border-gray-100 dark:border-gray-700 space-y-0.5"><sidebar-item v-for="child in item.children" :key="child.title" :item="child"></sidebar-item></div>' +
+                    '<div v-if="isOpen" class="pl-3 mt-1 ml-1 border-l-2 border-gray-100 dark:border-gray-700 space-y-0.5">' +
+                        '<sidebar-item v-for="child in item.children" :key="child.title" :item="child"></sidebar-item>' +
+                    '</div>' +
                 '</div>' +
-                '<router-link v-else :to="item.slug" class="block px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center" :class="$route.path === item.slug ? \'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm border border-gray-100 dark:border-gray-700\' : \'text-slate-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-slate-900 dark:hover:text-gray-200\'"><span class="mr-2">📄</span>{{ item.title }}</router-link>' +
+                
+                // FILE (Replaced v-else with v-if="!item.is_folder" to prevent blank page error)
+                '<div v-if="!item.is_folder">' +
+                    '<router-link :to="item.slug" class="block px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center" :class="$route.path === item.slug ? \'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm border border-gray-100 dark:border-gray-700\' : \'text-slate-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-slate-900 dark:hover:text-gray-200\'">' +
+                        '<span class="mr-2">📄</span>{{ item.title }}' +
+                    '</router-link>' +
+                '</div>' +
             '</div>'
         };
 
