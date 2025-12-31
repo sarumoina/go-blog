@@ -55,7 +55,7 @@ type TOCEntry struct {
 }
 
 func main() {
-	fmt.Println("--- BUILDING FRONTMATTER FIXED ---")
+	fmt.Println("--- BUILDING LAYOUT UPDATE ---")
 
 	if _, err := os.Stat(InputDir); os.IsNotExist(err) {
 		fmt.Println("Error: 'content' folder missing.")
@@ -64,11 +64,10 @@ func main() {
 	os.RemoveAll(OutputDir)
 	os.Mkdir(OutputDir, 0755)
 
-	// FIX: We specifically configure the parser to handle frontmatter first
 	markdown := goldmark.New(
 		goldmark.WithExtensions(
 			extension.GFM,
-			meta.New(meta.WithStoresInDocument()), // Force store in document context
+			meta.New(meta.WithStoresInDocument()),
 			highlighting.NewHighlighting(highlighting.WithStyle("github")),
 		),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
@@ -85,7 +84,6 @@ func main() {
 		if d.IsDir() { return nil }
 		if filepath.Ext(path) != ".md" { return nil }
 
-		// Calculate Paths
 		relPath, _ := filepath.Rel(InputDir, path)
 		relPath = filepath.ToSlash(relPath)
 		filename := strings.TrimSuffix(filepath.Base(path), ".md")
@@ -101,16 +99,11 @@ func main() {
 			slug = "/" + filepath.ToSlash(filepath.Join(dir, filename))
 		}
 
-		// Read Source
 		source, _ := os.ReadFile(path)
-
-		// Parse Context & Document
 		context := parser.NewContext()
 		doc := markdown.Parser().Parse(text.NewReader(source), parser.WithContext(context))
 
-		// EXTRACT FRONTMATTER
 		metaData := meta.Get(context)
-		
 		getString := func(key string) string {
 			if val, ok := metaData[key]; ok {
 				return fmt.Sprintf("%v", val)
@@ -128,7 +121,6 @@ func main() {
 			if slug == "/" { title = "Home" }
 		}
 
-		// Extract TOC
 		var toc []TOCEntry
 		ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 			if !entering { return ast.WalkContinue, nil }
@@ -145,7 +137,6 @@ func main() {
 			return ast.WalkContinue, nil
 		})
 
-		// Render HTML
 		var buf bytes.Buffer
 		markdown.Renderer().Render(&buf, source, doc)
 
@@ -158,7 +149,6 @@ func main() {
 			Category:  category,
 		}
 
-		// Add to Menu
 		parts := strings.Split(strings.TrimSuffix(relPath, ".md"), "/")
 		site.Menu = addToTree(site.Menu, parts, slug, title)
 
@@ -216,7 +206,8 @@ func addToTree(nodes []*MenuItem, parts []string, slug, finalTitle string) []*Me
 }
 
 func writeAppShell(path string) {
-	// Using single quotes in Vue templates to prevent conflict with Go backticks
+	// Note the CSS rule .prose h1:first-of-type { display: none; } 
+	// This hides the first # Heading in markdown to avoid duplicates.
 	const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -234,6 +225,10 @@ func writeAppShell(path string) {
         .prose pre { background-color: #f6f8fa !important; color: #24292e !important; border-radius: 6px; }
         .prose code { color: #d73a49; font-weight: 500; }
         .prose pre code { color: inherit; font-weight: normal; }
+        
+        /* HIDE Duplicate Title from Markdown Body */
+        .prose h1:first-of-type { display: none; }
+
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
         html { scroll-behavior: smooth; }
@@ -296,7 +291,7 @@ func writeAppShell(path string) {
         const { createApp, ref, computed, watch } = Vue;
         const { createRouter, createWebHashHistory, useRoute } = VueRouter;
 
-        // --- SIDEBAR COMPONENT ---
+        // --- SIDEBAR ITEM ---
         const SidebarItem = {
             name: 'SidebarItem',
             props: ['item'],
@@ -325,20 +320,25 @@ func writeAppShell(path string) {
             '</div>'
         };
 
-        // --- PAGE COMPONENT WITH METADATA ---
+        // --- PAGE VIEW (UPDATED LAYOUT) ---
         const PageView = {
             props: ['data'],
             template: '<div>' +
-                '<div class="mb-6 border-b border-gray-100 pb-6">' +
-                    '<div v-if="data.category" class="mb-3">' +
-                        '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">{{ data.category }}</span>' +
-                    '</div>' +
-                    '<div class="flex items-center space-x-4 text-sm text-slate-400">' +
-                        '<span v-if="data.published">Published: {{ data.published }}</span>' +
-                        '<span v-if="data.published && data.updated">•</span>' +
-                        '<span v-if="data.updated">Updated: {{ data.updated }}</span>' +
+                // 1. TITLE ON TOP
+                '<h1 class="text-4xl font-bold text-slate-900 mb-4 tracking-tight">{{ data.title }}</h1>' +
+                
+                // 2. METADATA ON ONE LINE (Flex items-center)
+                '<div class="flex items-center flex-wrap gap-4 text-sm text-slate-500 mb-8 pb-6 border-b border-gray-100">' +
+                    '<span v-if="data.category" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">{{ data.category }}</span>' +
+                    
+                    '<div v-if="data.published || data.updated" class="flex items-center space-x-3 ml-1">' +
+                        '<span v-if="data.published">Published: <span class="text-slate-700 font-medium">{{ data.published }}</span></span>' +
+                        '<span v-if="data.published && data.updated" class="text-gray-300">•</span>' +
+                        '<span v-if="data.updated">Updated: <span class="text-slate-700 font-medium">{{ data.updated }}</span></span>' +
                     '</div>' +
                 '</div>' +
+
+                // 3. CONTENT
                 '<article class="prose prose-slate prose-lg max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline" v-html="data.content"></article>' +
             '</div>'
         };
