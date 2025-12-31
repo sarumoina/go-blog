@@ -15,12 +15,21 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: FTP-Deploy-Action
+    - name: Upload to FTP
       uses: SamKirkland/FTP-Deploy-Action@v4.3.5
       with:
+        # Secrets (Set these in GitHub Settings > Secrets > Actions)
         server: ${{ secrets.FTP_SERVER }}
         username: ${{ secrets.FTP_USERNAME }}
         password: ${{ secrets.FTP_PASSWORD }}
+        
+        # Folders
         local-dir: ./public/
-        server-dir: ./public_html/
-        protocol: ftp
+        server-dir: ./public_html/  # Make sure this path is correct for your host
+        
+        # Connection Settings (FTPS Explicit)
+        protocol: ftps
+        port: 21
+        
+        # If your host has a self-signed or "bad" certificate, uncomment the line below:
+        # ignore-ssl-errors: true
