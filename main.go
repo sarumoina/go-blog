@@ -192,8 +192,12 @@ func main() {
 			Description: description,
 		}
 
-		parts := strings.Split(strings.TrimSuffix(relPath, ".md"), "/")
-		site.Menu = addToTree(site.Menu, parts, slug, title)
+		// MODIFIED: Only add to the navigation menu if it is NOT the home page ("/")
+		if slug != "/" {
+			parts := strings.Split(strings.TrimSuffix(relPath, ".md"), "/")
+			site.Menu = addToTree(site.Menu, parts, slug, title)
+		}
+
 		xmlUrls = append(xmlUrls, slug)
 		return nil
 	})
@@ -364,11 +368,19 @@ func writeAppShell(path string) {
             </div>
 
             <nav v-else class="flex-1 overflow-y-auto p-3">
-                 <div class="mb-4">
-                    <router-link to="/sitemap" class="block px-2 py-1 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400">
-                        Index
+                <div class="mb-2">
+                    <router-link to="/" class="block px-3 py-2 rounded-md text-sm font-semibold transition-colors duration-200 flex items-center" 
+                        :class="$route.path === '/' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm border border-gray-100 dark:border-gray-700' : 'text-slate-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-slate-900 dark:hover:text-gray-200'">
+                        <span class="mr-2">🏠</span> Home
                     </router-link>
                 </div>
+
+                 <div class="mb-4 mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <router-link to="/sitemap" class="block px-2 py-1 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400">
+                        Site Index
+                    </router-link>
+                </div>
+
                 <sidebar-item v-for="item in menu" :key="item.title" :item="item"></sidebar-item>
             </nav>
         </aside>
