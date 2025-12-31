@@ -1,0 +1,9 @@
+# Exclude the generated public site (We want to upload it, so do NOT ignore 'public')
+# But ignore the Go binary
+main.exe
+main
+mysite.exe
+
+# OS files
+.DS_Store
+Thumbs.db

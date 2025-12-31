@@ -1,0 +1,60 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home</title>
+    
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dracula: '#282a36',
+                        sidebar: '#f3f4f6',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+         
+        pre { border-radius: 0.5rem; }
+    </style>
+</head>
+<body class="bg-white text-gray-900 h-screen flex flex-col md:flex-row overflow-hidden">
+
+    <aside class="w-full md:w-64 bg-sidebar border-r border-gray-200 flex flex-col flex-shrink-0">
+        <div class="p-6 border-b border-gray-200">
+            <h1 class="font-bold text-xl tracking-tight text-gray-800">My Docs</h1>
+        </div>
+        <nav class="flex-1 overflow-y-auto p-4 space-y-1">
+            
+            <a href="index.html" 
+               class="block px-4 py-2 rounded-md text-sm font-medium transition-colors 
+                       bg-blue-600 text-white shadow-sm ">
+               Home
+            </a>
+            
+        </nav>
+    </aside>
+
+    <main class="flex-1 overflow-y-auto bg-white">
+        <div class="max-w-4xl mx-auto px-8 py-12">
+            
+            <h1 class="text-4xl font-extrabold text-gray-900 mb-8 border-b pb-4">Home</h1>
+            
+            <article class="prose prose-lg prose-slate max-w-none prose-pre:bg-[#282a36] prose-pre:p-0">
+                <h2 id="this-is-the-home-page">This is the home page</h2>
+
+            </article>
+
+        </div>
+    </main>
+
+</body>
+</html>
