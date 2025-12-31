@@ -45,7 +45,7 @@ type TOCEntry struct {
 }
 
 func main() {
-	fmt.Println("--- BUILDING VUE SPA (FIXED TOC) ---")
+	fmt.Println("--- BUILDING CLEAN SPA (LIGHT THEME) ---")
 
 	if _, err := os.Stat(InputDir); os.IsNotExist(err) {
 		fmt.Println("Error: 'content' folder missing.")
@@ -54,8 +54,9 @@ func main() {
 	os.RemoveAll(OutputDir)
 	os.Mkdir(OutputDir, 0755)
 
+	// 1. CHANGE: Use "github" style (Light Theme) instead of "dracula"
 	md := goldmark.New(
-		goldmark.WithExtensions(extension.GFM, highlighting.NewHighlighting(highlighting.WithStyle("dracula"))),
+		goldmark.WithExtensions(extension.GFM, highlighting.NewHighlighting(highlighting.WithStyle("github"))),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
 		goldmark.WithRendererOptions(html.WithHardWraps(), html.WithUnsafe()),
 	)
@@ -130,60 +131,89 @@ func writeAppShell(path string) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Docs</title>
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
-    <script>tailwind.config = { theme: { extend: { colors: { dracula: '#282a36' } } } }</script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://unpkg.com/vue-router@4/dist/vue-router.global.prod.js"></script>
+    
     <style>
-        pre { border-radius: 0.5rem; } 
+        /* Light Theme Code Block Overrides */
+        .prose pre { 
+            background-color: #f6f8fa !important; /* GitHub Light Gray */
+            color: #24292e !important; 
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+        }
+        .prose code { color: #d73a49; } /* Keyword red */
+        .prose pre code { color: inherit; font-weight: normal; }
+        
+        /* Transitions */
+        .slide-enter-active, .slide-leave-active { transition: transform 0.3s ease; }
+        .slide-enter-from, .slide-leave-to { transform: translateX(-100%); }
+        
         .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
         .fade-enter-from, .fade-leave-to { opacity: 0; }
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #ccc; borderRadius: 4px; }
+        
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
         html { scroll-behavior: smooth; }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-900 h-screen overflow-hidden">
-    <div id="app" class="h-full flex flex-col">
-        <nav class="bg-white border-b border-gray-200 shadow-sm shrink-0 z-50">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex justify-between h-16">
-                    <div class="flex items-center">
-                        <span class="font-bold text-xl tracking-tight text-gray-900 mr-8">My Docs</span>
-                        <div class="hidden md:flex space-x-4">
-                            <router-link v-for="item in menu" :key="item.slug" :to="item.slug" 
-                                class="px-3 py-2 rounded-md text-sm font-medium transition-colors"
-                                :class="$route.path === item.slug ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-100'">
-                                {{ item.title }}
-                            </router-link>
-                        </div>
-                    </div>
-                </div>
+<body class="bg-white text-gray-900 h-screen overflow-hidden flex">
+    <div id="app" class="w-full h-full flex relative">
+
+        <aside 
+            class="bg-gray-50 border-r border-gray-200 w-64 flex-shrink-0 flex flex-col transition-all duration-300 absolute md:relative z-20 h-full"
+            :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full md:w-0 md:overflow-hidden md:border-none'"
+        >
+            <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+                <span class="font-bold text-xl tracking-tight text-gray-900">My Docs</span>
+                <button @click="toggleSidebar" class="md:hidden text-gray-500 hover:text-gray-900">
+                    ✕
+                </button>
             </div>
-        </nav>
+            
+            <nav class="flex-1 overflow-y-auto p-4 space-y-1">
+                <router-link v-for="item in menu" :key="item.slug" :to="item.slug" 
+                    @click="closeMobileSidebar"
+                    class="block px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                    :class="$route.path === item.slug ? 'bg-white text-blue-600 shadow-sm border border-gray-100' : 'text-gray-600 hover:bg-gray-100'">
+                    {{ item.title }}
+                </router-link>
+            </nav>
+        </aside>
 
-        <div v-if="loading" class="flex-1 flex items-center justify-center">
-            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        </div>
+        <div class="flex-1 flex flex-col h-full overflow-hidden w-full relative">
+            
+            <header class="h-14 border-b border-gray-100 flex items-center px-4 flex-shrink-0 bg-white">
+                <button @click="toggleSidebar" class="p-2 -ml-2 text-gray-500 hover:text-gray-900 rounded-md hover:bg-gray-100">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                </button>
+                <div class="ml-4 font-medium text-gray-500 text-sm">Documentation</div>
+            </header>
 
-        <div v-else class="flex-1 flex overflow-hidden">
-            <div class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex overflow-hidden">
-                <main class="flex-1 overflow-y-auto pr-6" ref="mainScroll">
-                    <router-view v-slot="{ Component }">
-                        <transition name="fade" mode="out-in">
-                            <component :is="Component" />
-                        </transition>
-                    </router-view>
+            <div v-if="loading" class="flex-1 flex items-center justify-center">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+
+            <div v-else class="flex-1 overflow-hidden flex">
+                <main class="flex-1 overflow-y-auto p-8 lg:p-12 scroll-smooth" ref="mainScroll">
+                    <div class="max-w-4xl mx-auto">
+                        <router-view v-slot="{ Component }">
+                            <transition name="fade" mode="out-in">
+                                <component :is="Component" />
+                            </transition>
+                        </router-view>
+                    </div>
                 </main>
-                <aside class="hidden lg:block w-64 shrink-0 overflow-y-auto border-l border-gray-200 pl-4">
+
+                <aside class="hidden xl:block w-64 border-l border-gray-100 bg-white flex-shrink-0 overflow-y-auto p-8">
                     <div class="sticky top-0">
-                        <p class="mb-4 text-sm font-bold tracking-wider text-gray-900 uppercase">On this page</p>
-                        <nav class="flex flex-col space-y-2">
+                        <h5 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">On this page</h5>
+                        <nav class="space-y-2">
                             <a v-for="link in currentTOC" :key="link.id" 
                                @click.prevent="scrollToHeader(link.id)"
                                href="#"
-                               class="text-sm text-gray-600 hover:text-blue-600 transition-colors block truncate cursor-pointer"
-                               :class="{ 'pl-4': link.level === 3 }">
+                               class="block text-sm text-gray-600 hover:text-blue-600 transition-colors truncate cursor-pointer border-l-2 border-transparent pl-3 -ml-px hover:border-blue-500"
+                               :class="{ 'pl-6': link.level === 3 }">
                                {{ link.title }}
                             </a>
                         </nav>
@@ -191,19 +221,22 @@ func writeAppShell(path string) {
                 </aside>
             </div>
         </div>
+
+        <div v-if="sidebarOpen" @click="toggleSidebar" class="md:hidden fixed inset-0 bg-gray-900 bg-opacity-25 z-10"></div>
     </div>
 
     <script>
-        const { createApp, ref, computed, watch, nextTick } = Vue;
+        const { createApp, ref, computed, watch } = Vue;
         const { createRouter, createWebHashHistory, useRoute } = VueRouter;
 
+        // Page Component
         const PageView = {
-            template: '<article class="prose prose-lg prose-slate max-w-none prose-pre:bg-[#282a36] prose-pre:p-0" v-html="content"></article>',
+            template: '<article class="prose prose-slate max-w-none prose-h1:text-3xl prose-h1:font-bold prose-headings:font-semibold prose-a:text-blue-600" v-html="content"></article>',
             setup() {
                 const route = useRoute();
                 const content = computed(() => {
                     const page = window.siteData?.pages[route.path];
-                    return page ? page.content : "<h1>404 Not Found</h1>";
+                    return page ? page.content : "<h1 class='text-red-500'>404 Not Found</h1>";
                 });
                 return { content };
             }
@@ -213,6 +246,7 @@ func writeAppShell(path string) {
             setup() {
                 const loading = ref(true);
                 const menu = ref([]);
+                const sidebarOpen = ref(window.innerWidth > 768); // Open by default on desktop
                 const route = useRoute();
                 const mainScroll = ref(null);
 
@@ -230,28 +264,30 @@ func writeAppShell(path string) {
                     return page ? page.toc : [];
                 });
 
+                // Reset Scroll on Nav
                 watch(() => route.path, () => {
                     if(mainScroll.value) mainScroll.value.scrollTop = 0;
                 });
 
-                // --- NEW FUNCTION TO HANDLE SCROLLING ---
+                const toggleSidebar = () => sidebarOpen.value = !sidebarOpen.value;
+                const closeMobileSidebar = () => {
+                    if(window.innerWidth < 768) sidebarOpen.value = false;
+                }
+
                 const scrollToHeader = (id) => {
-                    // Find the header element inside the article
                     const element = document.getElementById(id);
                     if (element) {
                         element.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }
                 };
 
-                return { loading, menu, currentTOC, mainScroll, scrollToHeader };
+                return { loading, menu, currentTOC, sidebarOpen, toggleSidebar, closeMobileSidebar, mainScroll, scrollToHeader };
             }
         });
 
         const router = createRouter({
             history: createWebHashHistory(),
-            routes: [
-                { path: '/:pathMatch(.*)*', component: PageView }
-            ]
+            routes: [ { path: '/:pathMatch(.*)*', component: PageView } ]
         });
 
         app.use(router);
