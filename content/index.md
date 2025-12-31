@@ -5,7 +5,7 @@ updated on: 2025-01-05
 category: General
 ---
 
-## Isntall GUI in Ubuntu 
+## Install GUI in Ubuntu 
 
 **Install Minimal GUI (XFCE Core Only)**
 
@@ -51,14 +51,14 @@ sudo apt install xrdp -y
 sudo systemctl enable --now xrdp
 ```
 
-## Creating a user
+### Creating a user
 
 ```
 sudo addsuer myuser
 sudo usermod -aG sudo myuser
 ```
 
-## Deleting a user
+### Deleting a user
 
 ```
 sudo deluser username #or
@@ -67,7 +67,7 @@ sudo deluser --remove-home username
 
 ## Creating SSH keys
 
-**Generate the key**
+### Generate the key
 
 ```
 ssh-keygen -t ed25519 -C "your_email@example.com"  #ed25519 is the newest encryption
