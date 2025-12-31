@@ -59,7 +59,7 @@ type TOCEntry struct {
 var htmlTagRegex = regexp.MustCompile(`<[^>]*>`)
 
 func main() {
-	fmt.Println("--- BUILDING SITE (Collapsible Sidebar + Fixes) ---")
+	fmt.Println("--- BUILDING SITE (X-Template Fix) ---")
 
 	if _, err := os.Stat(InputDir); os.IsNotExist(err) {
 		fmt.Println("Error: 'content' folder missing.")
@@ -355,7 +355,6 @@ func writeAppShell(path string) {
                         <span class="mr-2">🏠</span> Home
                     </router-link>
                 </div>
-
                 <sidebar-item v-for="item in menu" :key="item.title" :item="item"></sidebar-item>
             </nav>
 
@@ -411,61 +410,90 @@ func writeAppShell(path string) {
         <div v-if="sidebarOpen" @click="toggleSidebar" class="md:hidden fixed inset-0 bg-gray-900 bg-opacity-20 z-10 backdrop-blur-sm"></div>
     </div>
 
+    <script type="text/x-template" id="sidebar-item-template">
+        <div class="mb-1 select-none">
+            <div v-if="item.is_folder">
+                <button type="button" @click="toggle" class="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-slate-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-left">
+                    <div class="flex items-center">
+                        <span class="mr-2">📂</span>
+                        <span>{{ item.title }}</span>
+                    </div>
+                    <span class="text-gray-400 text-[10px] transform transition-transform duration-200" :class="isOpen ? 'rotate-90' : ''">▶</span>
+                </button>
+                <div v-if="isOpen" class="pl-3 mt-1 ml-1 border-l-2 border-gray-100 dark:border-gray-700 space-y-0.5">
+                    <sidebar-item v-for="child in item.children" :key="child.title" :item="child"></sidebar-item>
+                </div>
+            </div>
+            <div v-if="!item.is_folder">
+                <router-link :to="item.slug" class="block px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center" 
+                    :class="$route.path === item.slug ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm border border-gray-100 dark:border-gray-700' : 'text-slate-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-slate-900 dark:hover:text-gray-200'">
+                    <span class="mr-2">📄</span>{{ item.title }}
+                </router-link>
+            </div>
+        </div>
+    </script>
+
+    <script type="text/x-template" id="page-view-template">
+        <div>
+            <h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-4 tracking-tight">{{ data.title }}</h1>
+            <div class="flex items-center flex-wrap gap-4 text-sm text-slate-500 dark:text-gray-400 mb-8 pb-6 border-b border-gray-100 dark:border-gray-800">
+                <span v-if="data.category" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200 border border-blue-100 dark:border-blue-800">{{ data.category }}</span>
+                <div v-if="data.published || data.updated" class="flex items-center space-x-3 ml-1">
+                    <span v-if="data.published">Published: <span class="text-slate-700 dark:text-gray-300 font-medium">{{ data.published }}</span></span>
+                    <span v-if="data.published && data.updated" class="text-gray-300 dark:text-gray-600">•</span>
+                    <span v-if="data.updated">Updated: <span class="text-slate-700 dark:text-gray-300 font-medium">{{ data.updated }}</span></span>
+                </div>
+            </div>
+            <article class="prose prose-slate dark:prose-invert prose-lg max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline" v-html="processedContent"></article>
+        </div>
+    </script>
+
+    <script type="text/x-template" id="sitemap-view-template">
+        <div>
+            <h1 class="text-4xl font-bold mb-8 dark:text-white">Site Index</h1>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div v-for="item in menu" :key="item.title">
+                    <h3 class="font-bold text-lg mb-2 text-slate-800 dark:text-gray-200">{{ item.title }}</h3>
+                    <ul class="space-y-1">
+                        <li v-if="!item.is_folder">
+                            <router-link :to="item.slug" class="text-blue-600 dark:text-blue-400 hover:underline">{{ item.title }}</router-link>
+                        </li>
+                        <li v-else v-for="child in item.children" :key="child.title" class="ml-4 list-disc marker:text-slate-300 dark:marker:text-gray-600">
+                            <router-link :to="child.slug" class="text-blue-600 dark:text-blue-400 hover:underline">{{ child.title }}</router-link>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </script>
+
     <script>
         const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         const { createRouter, createWebHashHistory, useRoute } = VueRouter;
 
-        // FIXED: Using v-if="is_folder" and v-if="!is_folder" to separate elements completely
-        // This avoids Vue Compiler Error 30 (v-else issue with text nodes)
+        // Note: Using template: '#id' fixes the JS string concatenation issues
         const SidebarItem = {
             name: 'SidebarItem',
             props: ['item'],
+            template: '#sidebar-item-template',
             setup(props) {
                 const route = useRoute();
-                // COLLAPSIBLE LOGIC restored
                 const isOpen = ref(false);
-                
-                // Helper to check for active children
                 const hasActiveChild = (item, currentPath) => {
                     if (item.slug === currentPath) return true;
                     if (item.children) return item.children.some(child => hasActiveChild(child, currentPath));
                     return false;
                 };
-
-                // Watch route to AUTO-OPEN this folder if active
                 watch(() => route.path, (newPath) => {
-                    if (props.item.is_folder && hasActiveChild(props.item, newPath)) {
-                        isOpen.value = true;
-                    }
+                    if (props.item.is_folder && hasActiveChild(props.item, newPath)) isOpen.value = true;
                 }, { immediate: true });
-
-                const toggle = () => isOpen.value = !isOpen.value;
-
-                return { isOpen, toggle };
-            },
-            template: '<div class="mb-1 select-none">' +
-                // FOLDER
-                '<div v-if="item.is_folder">' +
-                    '<button type="button" @click="toggle" class="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-slate-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-left">' +
-                        '<div class="flex items-center"><span class="mr-2">📂</span><span>{{ item.title }}</span></div>' +
-                        '<span class="text-gray-400 text-[10px] transform transition-transform duration-200" :class="isOpen ? \'rotate-90\' : \'\'">▶</span>' +
-                    '</button>' +
-                    '<div v-if="isOpen" class="pl-3 mt-1 ml-1 border-l-2 border-gray-100 dark:border-gray-700 space-y-0.5">' +
-                        '<sidebar-item v-for="child in item.children" :key="child.title" :item="child"></sidebar-item>' +
-                    '</div>' +
-                '</div>' +
-                
-                // FILE (Replaced v-else with v-if="!item.is_folder" to prevent blank page error)
-                '<div v-if="!item.is_folder">' +
-                    '<router-link :to="item.slug" class="block px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center" :class="$route.path === item.slug ? \'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm border border-gray-100 dark:border-gray-700\' : \'text-slate-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-slate-900 dark:hover:text-gray-200\'">' +
-                        '<span class="mr-2">📄</span>{{ item.title }}' +
-                    '</router-link>' +
-                '</div>' +
-            '</div>'
+                return { isOpen, toggle: () => isOpen.value = !isOpen.value };
+            }
         };
 
         const PageView = {
             props: ['data'],
+            template: '#page-view-template',
             setup(props) {
                 const processedContent = computed(() => {
                     if (!props.data.content) return '';
@@ -500,13 +528,12 @@ func writeAppShell(path string) {
                     });
                 }
                 return { processedContent };
-            },
-            template: '<div><h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-4 tracking-tight">{{ data.title }}</h1><div class="flex items-center flex-wrap gap-4 text-sm text-slate-500 dark:text-gray-400 mb-8 pb-6 border-b border-gray-100 dark:border-gray-800"><span v-if="data.category" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200 border border-blue-100 dark:border-blue-800">{{ data.category }}</span><div v-if="data.published || data.updated" class="flex items-center space-x-3 ml-1"><span v-if="data.published">Published: <span class="text-slate-700 dark:text-gray-300 font-medium">{{ data.published }}</span></span><span v-if="data.published && data.updated" class="text-gray-300 dark:text-gray-600">•</span><span v-if="data.updated">Updated: <span class="text-slate-700 dark:text-gray-300 font-medium">{{ data.updated }}</span></span></div></div><article class="prose prose-slate dark:prose-invert prose-lg max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline" v-html="processedContent"></article></div>'
+            }
         };
 
         const SitemapView = {
             props: ['menu'],
-            template: '<div><h1 class="text-4xl font-bold mb-8 dark:text-white">Site Index</h1><div class="grid grid-cols-1 md:grid-cols-2 gap-8"><div v-for="item in menu" :key="item.title"><h3 class="font-bold text-lg mb-2 text-slate-800 dark:text-gray-200">{{ item.title }}</h3><ul class="space-y-1"><li v-if="!item.is_folder"><router-link :to="item.slug" class="text-blue-600 dark:text-blue-400 hover:underline">{{ item.title }}</router-link></li><li v-else v-for="child in item.children" :key="child.title" class="ml-4 list-disc marker:text-slate-300 dark:marker:text-gray-600"><router-link :to="child.slug" class="text-blue-600 dark:text-blue-400 hover:underline">{{ child.title }}</router-link></li></ul></div></div></div>'
+            template: '#sitemap-view-template'
         };
 
         const app = createApp({
