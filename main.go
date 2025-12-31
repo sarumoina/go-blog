@@ -25,8 +25,6 @@ const (
 	OutputDir = "./public"
 )
 
-// --- DATA STRUCTURES ---
-
 type SiteData struct {
 	Pages map[string]PageData `json:"pages"`
 	Menu  []*MenuItem         `json:"menu"`
@@ -55,7 +53,7 @@ type TOCEntry struct {
 }
 
 func main() {
-	fmt.Println("--- BUILDING LAYOUT UPDATE ---")
+	fmt.Println("--- BUILDING WITH DYNAMIC HTML TITLE ---")
 
 	if _, err := os.Stat(InputDir); os.IsNotExist(err) {
 		fmt.Println("Error: 'content' folder missing.")
@@ -206,8 +204,7 @@ func addToTree(nodes []*MenuItem, parts []string, slug, finalTitle string) []*Me
 }
 
 func writeAppShell(path string) {
-	// Note the CSS rule .prose h1:first-of-type { display: none; } 
-	// This hides the first # Heading in markdown to avoid duplicates.
+	// Added the document.title watcher in the script at the bottom
 	const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -225,10 +222,7 @@ func writeAppShell(path string) {
         .prose pre { background-color: #f6f8fa !important; color: #24292e !important; border-radius: 6px; }
         .prose code { color: #d73a49; font-weight: 500; }
         .prose pre code { color: inherit; font-weight: normal; }
-        
-        /* HIDE Duplicate Title from Markdown Body */
         .prose h1:first-of-type { display: none; }
-
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
         html { scroll-behavior: smooth; }
@@ -291,7 +285,6 @@ func writeAppShell(path string) {
         const { createApp, ref, computed, watch } = Vue;
         const { createRouter, createWebHashHistory, useRoute } = VueRouter;
 
-        // --- SIDEBAR ITEM ---
         const SidebarItem = {
             name: 'SidebarItem',
             props: ['item'],
@@ -320,25 +313,18 @@ func writeAppShell(path string) {
             '</div>'
         };
 
-        // --- PAGE VIEW (UPDATED LAYOUT) ---
         const PageView = {
             props: ['data'],
             template: '<div>' +
-                // 1. TITLE ON TOP
                 '<h1 class="text-4xl font-bold text-slate-900 mb-4 tracking-tight">{{ data.title }}</h1>' +
-                
-                // 2. METADATA ON ONE LINE (Flex items-center)
                 '<div class="flex items-center flex-wrap gap-4 text-sm text-slate-500 mb-8 pb-6 border-b border-gray-100">' +
                     '<span v-if="data.category" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">{{ data.category }}</span>' +
-                    
                     '<div v-if="data.published || data.updated" class="flex items-center space-x-3 ml-1">' +
                         '<span v-if="data.published">Published: <span class="text-slate-700 font-medium">{{ data.published }}</span></span>' +
                         '<span v-if="data.published && data.updated" class="text-gray-300">•</span>' +
                         '<span v-if="data.updated">Updated: <span class="text-slate-700 font-medium">{{ data.updated }}</span></span>' +
                     '</div>' +
                 '</div>' +
-
-                // 3. CONTENT
                 '<article class="prose prose-slate prose-lg max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline" v-html="data.content"></article>' +
             '</div>'
         };
@@ -360,6 +346,11 @@ func writeAppShell(path string) {
                 const currentPage = computed(() => {
                     if (loading.value || !window.siteData) return { toc: [] };
                     return window.siteData.pages[route.path] || { title: '404', content: "<h1 class='text-red-500'>404 Not Found</h1>", toc: [] };
+                });
+
+                // --- NEW: Watch Page Title and Update HTML Title ---
+                watch(() => currentPage.value.title, (newTitle) => {
+                    document.title = newTitle ? newTitle : 'Docs';
                 });
 
                 watch(() => route.path, () => {
