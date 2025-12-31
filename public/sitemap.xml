@@ -2,12 +2,17 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://mysite.com/#/about</loc>
-    <lastmod>2025-12-31</lastmod>
+    <lastmod>2026-01-01</lastmod>
     <changefreq>weekly</changefreq>
   </url>
   <url>
     <loc>https://mysite.com/</loc>
-    <lastmod>2025-12-31</lastmod>
+    <lastmod>2026-01-01</lastmod>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mysite.com/#/vps/01. formatting-the-disk</loc>
+    <lastmod>2026-01-01</lastmod>
     <changefreq>weekly</changefreq>
   </url>
 </urlset>

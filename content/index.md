@@ -1,14 +1,13 @@
 ---
 title: Home
-published on: 2025-01-01
-updated on: 2025-01-05
-category: General
+published on: 2026-01-01
+updated on: 2026-01-01
 ---
 
 ## Install GUI in Ubuntu 
 
 **Install Minimal GUI (XFCE Core Only)**
-sdsad
+
 ```
 # Update base system
 sudo apt update && sudo apt upgrade -y
@@ -95,3 +94,4 @@ Host anyname
 ```
 ssh-copy-id -i ~/.ssh/key user@remote
 ```
+
