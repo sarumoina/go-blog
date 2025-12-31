@@ -25,7 +25,7 @@ import (
 const (
 	InputDir  = "./content"
 	OutputDir = "./public"
-	BaseURL   = "https://mysite.com"
+	BaseURL   = "https://mysite.com" // Update this for sitemap
 )
 
 type SiteData struct {
@@ -59,7 +59,7 @@ type TOCEntry struct {
 var htmlTagRegex = regexp.MustCompile(`<[^>]*>`)
 
 func main() {
-	fmt.Println("--- BUILDING SITE (X-Template Fix) ---")
+	fmt.Println("--- BUILDING FEATURE-PACKED SITE ---")
 
 	if _, err := os.Stat(InputDir); os.IsNotExist(err) {
 		fmt.Println("Error: 'content' folder missing.")
@@ -68,6 +68,8 @@ func main() {
 	os.RemoveAll(OutputDir)
 	os.Mkdir(OutputDir, 0755)
 
+	// Note: We use "dracula" style. In Dark mode it fits perfectly.
+	// In Light mode, it still looks good as a contrast block.
 	markdown := goldmark.New(
 		goldmark.WithExtensions(
 			extension.GFM,
@@ -113,10 +115,6 @@ func main() {
 		}
 
 		source, _ := os.ReadFile(path)
-
-		// Manual Shortcode
-		source = bytes.ReplaceAll(source, []byte(":::gap:::"), []byte(`<div class="h-24 w-full"></div>`))
-
 		context := parser.NewContext()
 		doc := markdown.Parser().Parse(text.NewReader(source), parser.WithContext(context))
 
@@ -194,11 +192,8 @@ func main() {
 			Description: description,
 		}
 
-		if slug != "/" {
-			parts := strings.Split(strings.TrimSuffix(relPath, ".md"), "/")
-			site.Menu = addToTree(site.Menu, parts, slug, title)
-		}
-
+		parts := strings.Split(strings.TrimSuffix(relPath, ".md"), "/")
+		site.Menu = addToTree(site.Menu, parts, slug, title)
 		xmlUrls = append(xmlUrls, slug)
 		return nil
 	})
@@ -223,17 +218,15 @@ func addToTree(nodes []*MenuItem, parts []string, slug, finalTitle string) []*Me
 	isLast := len(parts) == 1
 	var foundNode *MenuItem
 
-	folderTitle := strings.Title(strings.ReplaceAll(currentPart, "-", " "))
-
 	for _, node := range nodes {
-		if node.Title == folderTitle && node.IsFolder == !isLast {
+		if node.Title == strings.Title(strings.ReplaceAll(currentPart, "-", " ")) && node.IsFolder == !isLast {
 			foundNode = node
 			break
 		}
 	}
 
 	if foundNode == nil {
-		title := folderTitle
+		title := strings.Title(strings.ReplaceAll(currentPart, "-", " "))
 		if isLast {
 			title = finalTitle
 		}
@@ -278,6 +271,9 @@ func generateXMLSitemap(slugs []string) {
 }
 
 func writeAppShell(path string) {
+	// 1. ADDED: tailwind darkMode: 'class'
+	// 2. ADDED: Script to transform Admonitions and Copy Buttons
+	// 3. ADDED: Search Component logic
 	const html = `<!DOCTYPE html>
 <html lang="en" class="light">
 <head>
@@ -289,33 +285,51 @@ func writeAppShell(path string) {
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script>
         tailwind.config = { 
-            darkMode: 'class', 
+            darkMode: 'class', // Enable class-based dark mode
             theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'] } } } 
         }
     </script>
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://unpkg.com/vue-router@4/dist/vue-router.global.prod.js"></script>
     <style>
-        .prose h2 { margin-top: 3.5rem !important; padding-top: 1.5rem !important; border-top: 1px solid #e5e7eb; }
-        .dark .prose h2 { border-color: #374151; }
-        .prose h3 { margin-top: 2rem !important; }
+        /* CSS for Admonitions */
         .admonition { border-left-width: 4px; padding: 1rem; margin-bottom: 1.5rem; border-radius: 0.375rem; background-color: #f9fafb; }
         .dark .admonition { background-color: #1f2937; }
         .admonition-title { font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; }
-        .admonition-note { border-color: #3b82f6; } .admonition-note .admonition-title { color: #2563eb; }
-        .admonition-tip { border-color: #10b981; } .admonition-tip .admonition-title { color: #059669; }
-        .admonition-warning { border-color: #f59e0b; } .admonition-warning .admonition-title { color: #d97706; }
-        .admonition-important { border-color: #8b5cf6; } .admonition-important .admonition-title { color: #7c3aed; }
-        .admonition-caution { border-color: #ef4444; } .admonition-caution .admonition-title { color: #dc2626; }
+        
+        .admonition-note { border-color: #3b82f6; } /* Blue */
+        .admonition-note .admonition-title { color: #2563eb; }
+        
+        .admonition-tip { border-color: #10b981; } /* Green */
+        .admonition-tip .admonition-title { color: #059669; }
+        
+        .admonition-warning { border-color: #f59e0b; } /* Orange */
+        .admonition-warning .admonition-title { color: #d97706; }
+        
+        .admonition-important { border-color: #8b5cf6; } /* Purple */
+        .admonition-important .admonition-title { color: #7c3aed; }
+        
+        .admonition-caution { border-color: #ef4444; } /* Red */
+        .admonition-caution .admonition-title { color: #dc2626; }
+
+        /* Dark mode typography adjustments */
         .dark .prose { color: #d1d5db; }
         .dark .prose h1, .dark .prose h2, .dark .prose h3, .dark .prose h4 { color: #f3f4f6; }
         .dark .prose a { color: #60a5fa; }
         .dark .prose strong { color: #f3f4f6; }
         .dark .prose code { color: #fca5a5; }
         .prose h1:first-of-type { display: none; }
+        
+        /* Copy Button Styles */
         .code-wrapper { position: relative; }
-        .copy-btn { position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.75rem; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 0.25rem; color: #fff; cursor: pointer; opacity: 0; transition: opacity 0.2s; }
+        .copy-btn { 
+            position: absolute; top: 0.5rem; right: 0.5rem; 
+            padding: 0.25rem 0.5rem; font-size: 0.75rem; 
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); 
+            border-radius: 0.25rem; color: #fff; cursor: pointer; opacity: 0; transition: opacity 0.2s;
+        }
         .code-wrapper:hover .copy-btn { opacity: 1; }
+
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
         .dark ::-webkit-scrollbar-thumb { background: #4b5563; }
@@ -327,17 +341,18 @@ func writeAppShell(path string) {
 
         <aside class="bg-gray-50 dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 w-64 flex-shrink-0 flex flex-col transition-all duration-300 absolute md:relative z-20 h-full"
             :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full md:w-0 md:overflow-hidden md:border-none'">
-            
             <div class="p-5 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-800">
-                <span class="font-bold text-lg tracking-tight text-slate-900 dark:text-white">Docs</span>
+                <router-link to="/" class="font-bold text-lg tracking-tight text-slate-900 dark:text-white">Docs</router-link>
                 <button @click="toggleSidebar" class="md:hidden text-gray-500 dark:text-gray-400">✕</button>
             </div>
             
             <div class="p-3 border-b border-gray-200 dark:border-gray-700">
-                <input v-model="searchQuery" type="text" placeholder="Search pages..." class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-400">
+                <input v-model="searchQuery" type="text" placeholder="Search pages..." 
+                    class="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 dark:text-white placeholder-gray-400">
             </div>
 
             <div v-if="searchQuery" class="flex-1 overflow-y-auto p-3 bg-white dark:bg-gray-800">
+                <div v-if="filteredPages.length === 0" class="text-sm text-gray-500 text-center py-4">No results found.</div>
                 <ul v-else class="space-y-1">
                     <li v-for="page in filteredPages" :key="page.slug">
                         <router-link :to="page.slug" @click="searchQuery = ''" class="block px-2 py-1.5 text-sm text-slate-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-gray-700 hover:text-blue-600 rounded-md">
@@ -349,21 +364,13 @@ func writeAppShell(path string) {
             </div>
 
             <nav v-else class="flex-1 overflow-y-auto p-3">
-                 <div class="mb-2">
-                    <router-link to="/" class="block px-3 py-2 rounded-md text-sm font-semibold transition-colors duration-200 flex items-center" 
-                        :class="$route.path === '/' ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm border border-gray-100 dark:border-gray-700' : 'text-slate-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-slate-900 dark:hover:text-gray-200'">
-                        <span class="mr-2">🏠</span> Home
+                 <div class="mb-4">
+                    <router-link to="/sitemap" class="block px-2 py-1 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-gray-500 hover:text-blue-600 dark:hover:text-blue-400">
+                        Index
                     </router-link>
                 </div>
                 <sidebar-item v-for="item in menu" :key="item.title" :item="item"></sidebar-item>
             </nav>
-
-            <div class="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 mt-auto">
-                <router-link to="/sitemap" class="flex items-center text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
-                    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-                    Site Index
-                </router-link>
-            </div>
         </aside>
 
         <div class="flex-1 flex flex-col h-full overflow-hidden w-full relative bg-white dark:bg-gray-900">
@@ -374,8 +381,10 @@ func writeAppShell(path string) {
                     </button>
                     <div class="ml-4 font-medium text-slate-400 text-sm truncate">/ {{ currentPage.title }}</div>
                 </div>
+
                 <button @click="toggleDarkMode" class="p-2 text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-300 transition-colors">
-                    <span v-if="isDark">☀️</span><span v-else>🌙</span>
+                    <span v-if="isDark">☀️</span>
+                    <span v-else>🌙</span>
                 </button>
             </header>
 
@@ -410,72 +419,14 @@ func writeAppShell(path string) {
         <div v-if="sidebarOpen" @click="toggleSidebar" class="md:hidden fixed inset-0 bg-gray-900 bg-opacity-20 z-10 backdrop-blur-sm"></div>
     </div>
 
-    <script type="text/x-template" id="sidebar-item-template">
-        <div class="mb-1 select-none">
-            <div v-if="item.is_folder">
-                <button type="button" @click="toggle" class="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-slate-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors text-left">
-                    <div class="flex items-center">
-                        <span class="mr-2">📂</span>
-                        <span>{{ item.title }}</span>
-                    </div>
-                    <span class="text-gray-400 text-[10px] transform transition-transform duration-200" :class="isOpen ? 'rotate-90' : ''">▶</span>
-                </button>
-                <div v-if="isOpen" class="pl-3 mt-1 ml-1 border-l-2 border-gray-100 dark:border-gray-700 space-y-0.5">
-                    <sidebar-item v-for="child in item.children" :key="child.title" :item="child"></sidebar-item>
-                </div>
-            </div>
-            <div v-if="!item.is_folder">
-                <router-link :to="item.slug" class="block px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center" 
-                    :class="$route.path === item.slug ? 'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm border border-gray-100 dark:border-gray-700' : 'text-slate-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-slate-900 dark:hover:text-gray-200'">
-                    <span class="mr-2">📄</span>{{ item.title }}
-                </router-link>
-            </div>
-        </div>
-    </script>
-
-    <script type="text/x-template" id="page-view-template">
-        <div>
-            <h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-4 tracking-tight">{{ data.title }}</h1>
-            <div class="flex items-center flex-wrap gap-4 text-sm text-slate-500 dark:text-gray-400 mb-8 pb-6 border-b border-gray-100 dark:border-gray-800">
-                <span v-if="data.category" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200 border border-blue-100 dark:border-blue-800">{{ data.category }}</span>
-                <div v-if="data.published || data.updated" class="flex items-center space-x-3 ml-1">
-                    <span v-if="data.published">Published: <span class="text-slate-700 dark:text-gray-300 font-medium">{{ data.published }}</span></span>
-                    <span v-if="data.published && data.updated" class="text-gray-300 dark:text-gray-600">•</span>
-                    <span v-if="data.updated">Updated: <span class="text-slate-700 dark:text-gray-300 font-medium">{{ data.updated }}</span></span>
-                </div>
-            </div>
-            <article class="prose prose-slate dark:prose-invert prose-lg max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline" v-html="processedContent"></article>
-        </div>
-    </script>
-
-    <script type="text/x-template" id="sitemap-view-template">
-        <div>
-            <h1 class="text-4xl font-bold mb-8 dark:text-white">Site Index</h1>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div v-for="item in menu" :key="item.title">
-                    <h3 class="font-bold text-lg mb-2 text-slate-800 dark:text-gray-200">{{ item.title }}</h3>
-                    <ul class="space-y-1">
-                        <li v-if="!item.is_folder">
-                            <router-link :to="item.slug" class="text-blue-600 dark:text-blue-400 hover:underline">{{ item.title }}</router-link>
-                        </li>
-                        <li v-else v-for="child in item.children" :key="child.title" class="ml-4 list-disc marker:text-slate-300 dark:marker:text-gray-600">
-                            <router-link :to="child.slug" class="text-blue-600 dark:text-blue-400 hover:underline">{{ child.title }}</router-link>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </script>
-
     <script>
         const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
         const { createRouter, createWebHashHistory, useRoute } = VueRouter;
 
-        // Note: Using template: '#id' fixes the JS string concatenation issues
+        // --- SIDEBAR ITEM ---
         const SidebarItem = {
             name: 'SidebarItem',
             props: ['item'],
-            template: '#sidebar-item-template',
             setup(props) {
                 const route = useRoute();
                 const isOpen = ref(false);
@@ -488,33 +439,55 @@ func writeAppShell(path string) {
                     if (props.item.is_folder && hasActiveChild(props.item, newPath)) isOpen.value = true;
                 }, { immediate: true });
                 return { isOpen, toggle: () => isOpen.value = !isOpen.value };
-            }
+            },
+            template: '<div class="mb-1 select-none">' +
+                '<div v-if="item.is_folder">' +
+                    '<button @click="toggle" class="w-full flex items-center justify-between px-2 py-1.5 text-sm font-semibold text-slate-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors">' +
+                        '<div class="flex items-center"><svg class="w-4 h-4 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path></svg><span>{{ item.title }}</span></div>' +
+                        '<span class="text-gray-400 text-[10px] transform transition-transform duration-200" :class="isOpen ? \'rotate-90\' : \'\'">▶</span>' +
+                    '</button>' +
+                    '<div v-if="isOpen" class="pl-2 mt-1 ml-2 border-l border-gray-200 dark:border-gray-700 space-y-0.5"><sidebar-item v-for="child in item.children" :key="child.title" :item="child"></sidebar-item></div>' +
+                '</div>' +
+                '<router-link v-else :to="item.slug" class="block px-3 py-1.5 rounded-md text-sm font-medium transition-colors duration-200 flex items-center" :class="$route.path === item.slug ? \'bg-white dark:bg-gray-800 text-blue-600 dark:text-blue-400 shadow-sm border border-gray-100 dark:border-gray-700\' : \'text-slate-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-slate-900 dark:hover:text-gray-200\'">{{ item.title }}</router-link>' +
+            '</div>'
         };
 
+        // --- PAGE VIEW (With Admonition & Copy Logic) ---
         const PageView = {
             props: ['data'],
-            template: '#page-view-template',
             setup(props) {
+                // Post-process HTML for Admonitions
                 const processedContent = computed(() => {
                     if (!props.data.content) return '';
                     let html = props.data.content;
+                    
+                    // Regex for Admonitions: <blockquote><p>[!TYPE] ...</p></blockquote>
                     const regex = /<blockquote>\s*<p>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*?)<\/p>\s*(.*?)<\/blockquote>/gs;
+                    
                     html = html.replace(regex, (match, type, titleLine, body) => {
                         const typeLower = type.toLowerCase();
                         const title = titleLine.trim() || type;
-                        return '<div class="admonition admonition-' + typeLower + '"><div class="admonition-title">' + title + '</div><div>' + body + '</div></div>';
+                        return '<div class="admonition admonition-' + typeLower + '">' +
+                               '<div class="admonition-title">' + title + '</div>' +
+                               '<div>' + body + '</div>' +
+                               '</div>';
                     });
                     return html;
                 });
+
+                // Add Copy Buttons after render
                 onMounted(() => injectCopyButtons());
                 watch(() => props.data.content, () => nextTick(injectCopyButtons));
+
                 function injectCopyButtons() {
                     document.querySelectorAll('pre').forEach(pre => {
                         if (pre.parentNode.classList.contains('code-wrapper')) return;
+                        
                         const wrapper = document.createElement('div');
                         wrapper.className = 'code-wrapper';
                         pre.parentNode.insertBefore(wrapper, pre);
                         wrapper.appendChild(pre);
+                        
                         const btn = document.createElement('button');
                         btn.className = 'copy-btn';
                         btn.textContent = 'Copy';
@@ -527,13 +500,26 @@ func writeAppShell(path string) {
                         wrapper.appendChild(btn);
                     });
                 }
+
                 return { processedContent };
-            }
+            },
+            template: '<div>' +
+                '<h1 class="text-4xl font-bold text-slate-900 dark:text-white mb-4 tracking-tight">{{ data.title }}</h1>' +
+                '<div class="flex items-center flex-wrap gap-4 text-sm text-slate-500 dark:text-gray-400 mb-8 pb-6 border-b border-gray-100 dark:border-gray-800">' +
+                    '<span v-if="data.category" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200 border border-blue-100 dark:border-blue-800">{{ data.category }}</span>' +
+                    '<div v-if="data.published || data.updated" class="flex items-center space-x-3 ml-1">' +
+                        '<span v-if="data.published">Published: <span class="text-slate-700 dark:text-gray-300 font-medium">{{ data.published }}</span></span>' +
+                        '<span v-if="data.published && data.updated" class="text-gray-300 dark:text-gray-600">•</span>' +
+                        '<span v-if="data.updated">Updated: <span class="text-slate-700 dark:text-gray-300 font-medium">{{ data.updated }}</span></span>' +
+                    '</div>' +
+                '</div>' +
+                '<article class="prose prose-slate dark:prose-invert prose-lg max-w-none prose-headings:font-semibold prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline" v-html="processedContent"></article>' +
+            '</div>'
         };
 
         const SitemapView = {
             props: ['menu'],
-            template: '#sitemap-view-template'
+            template: '<div><h1 class="text-4xl font-bold mb-8 dark:text-white">Site Index</h1><div class="grid grid-cols-1 md:grid-cols-2 gap-8"><div v-for="item in menu" :key="item.title"><h3 class="font-bold text-lg mb-2 text-slate-800 dark:text-gray-200">{{ item.title }}</h3><ul class="space-y-1"><li v-if="!item.is_folder"><router-link :to="item.slug" class="text-blue-600 dark:text-blue-400 hover:underline">{{ item.title }}</router-link></li><li v-else v-for="child in item.children" :key="child.title" class="ml-4 list-disc marker:text-slate-300 dark:marker:text-gray-600"><router-link :to="child.slug" class="text-blue-600 dark:text-blue-400 hover:underline">{{ child.title }}</router-link></li></ul></div></div></div>'
         };
 
         const app = createApp({
@@ -543,13 +529,23 @@ func writeAppShell(path string) {
                 const sidebarOpen = ref(window.innerWidth > 1024);
                 const route = useRoute();
                 const mainScroll = ref(null);
+                
+                // Dark Mode Logic
                 const isDark = ref(localStorage.getItem('theme') === 'dark');
                 const toggleDarkMode = () => {
                     isDark.value = !isDark.value;
-                    if (isDark.value) { document.documentElement.classList.add('dark'); localStorage.setItem('theme', 'dark'); }
-                    else { document.documentElement.classList.remove('dark'); localStorage.setItem('theme', 'light'); }
+                    if (isDark.value) {
+                        document.documentElement.classList.add('dark');
+                        localStorage.setItem('theme', 'dark');
+                    } else {
+                        document.documentElement.classList.remove('dark');
+                        localStorage.setItem('theme', 'light');
+                    }
                 };
+                // Init Dark Mode
                 if (isDark.value) document.documentElement.classList.add('dark');
+
+                // Search Logic
                 const searchQuery = ref('');
                 const allPagesList = ref([]);
                 const filteredPages = computed(() => {
@@ -557,30 +553,39 @@ func writeAppShell(path string) {
                     const q = searchQuery.value.toLowerCase();
                     return allPagesList.value.filter(p => p.title.toLowerCase().includes(q));
                 });
+
                 fetch('db.json').then(res => res.json()).then(data => {
                     window.siteData = data;
                     menu.value = data.menu;
-                    allPagesList.value = Object.keys(data.pages).map(slug => ({ slug, ...data.pages[slug] }));
+                    // Flatten pages for search
+                    allPagesList.value = Object.keys(data.pages).map(slug => ({
+                        slug, ...data.pages[slug]
+                    }));
                     loading.value = false;
                 });
+
                 const currentPage = computed(() => {
                     if (loading.value || !window.siteData) return { toc: [] };
                     return window.siteData.pages[route.path] || { title: '404', content: "<h1 class='text-red-500'>404 Not Found</h1>", toc: [] };
                 });
+
                 watch(() => currentPage.value, (page) => {
                     document.title = page.title ? page.title : 'Docs';
                     const metaDesc = document.querySelector('meta[name="description"]');
                     if (metaDesc) metaDesc.setAttribute("content", page.description || "Documentation");
                 });
+
                 watch(() => route.path, () => {
                     if(mainScroll.value) mainScroll.value.scrollTop = 0;
                     if(window.innerWidth < 1024) sidebarOpen.value = false;
                 });
+
                 const toggleSidebar = () => sidebarOpen.value = !sidebarOpen.value;
                 const scrollToHeader = (id) => {
                     const el = document.getElementById(id);
                     if(el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 };
+
                 return { loading, menu, currentPage, sidebarOpen, toggleSidebar, mainScroll, scrollToHeader, isDark, toggleDarkMode, searchQuery, filteredPages };
             }
         });
