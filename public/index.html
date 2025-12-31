@@ -77,7 +77,7 @@
         const { createApp, ref, computed, watch } = Vue;
         const { createRouter, createWebHashHistory, useRoute } = VueRouter;
 
-        // --- SIDEBAR ITEM (Templates fixed to use single quotes) ---
+        // --- SIDEBAR COMPONENT ---
         const SidebarItem = {
             name: 'SidebarItem',
             props: ['item'],
@@ -106,7 +106,7 @@
             '</div>'
         };
 
-        // --- PAGE VIEW (Templates fixed to use single quotes) ---
+        // --- PAGE COMPONENT WITH METADATA ---
         const PageView = {
             props: ['data'],
             template: '<div>' +

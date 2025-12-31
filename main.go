@@ -55,7 +55,7 @@ type TOCEntry struct {
 }
 
 func main() {
-	fmt.Println("--- BUILDING FIXED SPA ---")
+	fmt.Println("--- BUILDING FRONTMATTER FIXED ---")
 
 	if _, err := os.Stat(InputDir); os.IsNotExist(err) {
 		fmt.Println("Error: 'content' folder missing.")
@@ -64,10 +64,11 @@ func main() {
 	os.RemoveAll(OutputDir)
 	os.Mkdir(OutputDir, 0755)
 
+	// FIX: We specifically configure the parser to handle frontmatter first
 	markdown := goldmark.New(
 		goldmark.WithExtensions(
 			extension.GFM,
-			meta.Meta,
+			meta.New(meta.WithStoresInDocument()), // Force store in document context
 			highlighting.NewHighlighting(highlighting.WithStyle("github")),
 		),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
@@ -84,6 +85,7 @@ func main() {
 		if d.IsDir() { return nil }
 		if filepath.Ext(path) != ".md" { return nil }
 
+		// Calculate Paths
 		relPath, _ := filepath.Rel(InputDir, path)
 		relPath = filepath.ToSlash(relPath)
 		filename := strings.TrimSuffix(filepath.Base(path), ".md")
@@ -99,12 +101,16 @@ func main() {
 			slug = "/" + filepath.ToSlash(filepath.Join(dir, filename))
 		}
 
+		// Read Source
 		source, _ := os.ReadFile(path)
-		context := parser.NewContext()
-		reader := text.NewReader(source)
-		doc := markdown.Parser().Parse(reader, parser.WithContext(context))
 
+		// Parse Context & Document
+		context := parser.NewContext()
+		doc := markdown.Parser().Parse(text.NewReader(source), parser.WithContext(context))
+
+		// EXTRACT FRONTMATTER
 		metaData := meta.Get(context)
+		
 		getString := func(key string) string {
 			if val, ok := metaData[key]; ok {
 				return fmt.Sprintf("%v", val)
@@ -116,11 +122,13 @@ func main() {
 		updated := getString("updated on")
 		category := getString("category")
 		title := getString("title")
+		
 		if title == "" {
 			title = strings.Title(strings.ReplaceAll(filename, "-", " "))
 			if slug == "/" { title = "Home" }
 		}
 
+		// Extract TOC
 		var toc []TOCEntry
 		ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 			if !entering { return ast.WalkContinue, nil }
@@ -137,6 +145,7 @@ func main() {
 			return ast.WalkContinue, nil
 		})
 
+		// Render HTML
 		var buf bytes.Buffer
 		markdown.Renderer().Render(&buf, source, doc)
 
@@ -149,6 +158,7 @@ func main() {
 			Category:  category,
 		}
 
+		// Add to Menu
 		parts := strings.Split(strings.TrimSuffix(relPath, ".md"), "/")
 		site.Menu = addToTree(site.Menu, parts, slug, title)
 
@@ -206,7 +216,7 @@ func addToTree(nodes []*MenuItem, parts []string, slug, finalTitle string) []*Me
 }
 
 func writeAppShell(path string) {
-	// Note: We use single quotes for the Vue templates below to avoid breaking the Go backticks.
+	// Using single quotes in Vue templates to prevent conflict with Go backticks
 	const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -286,7 +296,7 @@ func writeAppShell(path string) {
         const { createApp, ref, computed, watch } = Vue;
         const { createRouter, createWebHashHistory, useRoute } = VueRouter;
 
-        // --- SIDEBAR ITEM (Templates fixed to use single quotes) ---
+        // --- SIDEBAR COMPONENT ---
         const SidebarItem = {
             name: 'SidebarItem',
             props: ['item'],
@@ -315,7 +325,7 @@ func writeAppShell(path string) {
             '</div>'
         };
 
-        // --- PAGE VIEW (Templates fixed to use single quotes) ---
+        // --- PAGE COMPONENT WITH METADATA ---
         const PageView = {
             props: ['data'],
             template: '<div>' +
