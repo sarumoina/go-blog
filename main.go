@@ -22,7 +22,6 @@ const (
 	OutputDir = "./public"
 )
 
-// The JSON Structure
 type SiteData struct {
 	Pages map[string]PageData `json:"pages"`
 	Menu  []MenuItem          `json:"menu"`
@@ -46,7 +45,7 @@ type TOCEntry struct {
 }
 
 func main() {
-	fmt.Println("--- BUILDING VUE SPA (FIXED URLS) ---")
+	fmt.Println("--- BUILDING VUE SPA (FIXED TOC) ---")
 
 	if _, err := os.Stat(InputDir); os.IsNotExist(err) {
 		fmt.Println("Error: 'content' folder missing.")
@@ -70,17 +69,13 @@ func main() {
 	for _, file := range files {
 		if filepath.Ext(file.Name()) != ".md" { continue }
 
-		// --- URL FIX START ---
 		filename := strings.TrimSuffix(file.Name(), ".md")
 		var slug string
-		
 		if filename == "index" {
 			slug = "/"
 		} else {
-			// Force absolute path (e.g., "/about" instead of "about")
 			slug = "/" + filename
 		}
-		// --- URL FIX END ---
 
 		srcPath := filepath.Join(InputDir, file.Name())
 		source, _ := os.ReadFile(srcPath)
@@ -142,10 +137,10 @@ func writeAppShell(path string) {
         pre { border-radius: 0.5rem; } 
         .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
         .fade-enter-from, .fade-leave-to { opacity: 0; }
-        /* Hide scrollbar for cleaner look */
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #ccc; borderRadius: 4px; }
+        html { scroll-behavior: smooth; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-900 h-screen overflow-hidden">
@@ -184,8 +179,10 @@ func writeAppShell(path string) {
                     <div class="sticky top-0">
                         <p class="mb-4 text-sm font-bold tracking-wider text-gray-900 uppercase">On this page</p>
                         <nav class="flex flex-col space-y-2">
-                            <a v-for="link in currentTOC" :key="link.id" :href="'#' + link.id"
-                               class="text-sm text-gray-600 hover:text-blue-600 transition-colors block truncate"
+                            <a v-for="link in currentTOC" :key="link.id" 
+                               @click.prevent="scrollToHeader(link.id)"
+                               href="#"
+                               class="text-sm text-gray-600 hover:text-blue-600 transition-colors block truncate cursor-pointer"
                                :class="{ 'pl-4': link.level === 3 }">
                                {{ link.title }}
                             </a>
@@ -197,7 +194,7 @@ func writeAppShell(path string) {
     </div>
 
     <script>
-        const { createApp, ref, computed, watch } = Vue;
+        const { createApp, ref, computed, watch, nextTick } = Vue;
         const { createRouter, createWebHashHistory, useRoute } = VueRouter;
 
         const PageView = {
@@ -205,9 +202,8 @@ func writeAppShell(path string) {
             setup() {
                 const route = useRoute();
                 const content = computed(() => {
-                    // Match route path exactly
                     const page = window.siteData?.pages[route.path];
-                    return page ? page.content : "<h1>404 Not Found</h1><p>Check your filename.</p>";
+                    return page ? page.content : "<h1>404 Not Found</h1>";
                 });
                 return { content };
             }
@@ -238,7 +234,16 @@ func writeAppShell(path string) {
                     if(mainScroll.value) mainScroll.value.scrollTop = 0;
                 });
 
-                return { loading, menu, currentTOC, mainScroll };
+                // --- NEW FUNCTION TO HANDLE SCROLLING ---
+                const scrollToHeader = (id) => {
+                    // Find the header element inside the article
+                    const element = document.getElementById(id);
+                    if (element) {
+                        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                };
+
+                return { loading, menu, currentTOC, mainScroll, scrollToHeader };
             }
         });
 
