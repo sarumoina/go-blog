@@ -94,21 +94,36 @@ func main() {
 		srcPath := filepath.Join(InputDir, file.Name())
 		source, _ := os.ReadFile(srcPath)
 
-		// AST Parsing for TOC
+		// --- FIXED AST PARSING SECTION ---
 		context := parser.NewContext()
 		reader := text.NewReader(source)
 		doc := md.Parser().Parse(reader, parser.WithContext(context))
 		var toc []TOCEntry
+		
 		ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
 			if !entering { return ast.WalkContinue, nil }
+			
 			if heading, ok := n.(*ast.Heading); ok {
-				id := string(heading.AttributeString("id"))
-				if id == "" { return ast.WalkContinue, nil }
+				// FIX: Correctly handle the Attribute return values
+				idVal, found := heading.Attribute([]byte("id"))
+				if !found {
+					return ast.WalkContinue, nil
+				}
+				
+				// Ensure the ID is a byte slice before converting
+				idBytes, ok := idVal.([]byte)
+				if !ok {
+					return ast.WalkContinue, nil
+				}
+				
+				id := string(idBytes)
 				title := string(heading.Text(source))
+				
 				toc = append(toc, TOCEntry{Title: title, ID: id, Level: heading.Level})
 			}
 			return ast.WalkContinue, nil
 		})
+		// --- END FIX ---
 
 		var buf bytes.Buffer
 		md.Renderer().Render(&buf, source, doc)
