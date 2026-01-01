@@ -62,7 +62,7 @@ var wikiLinkRegex = regexp.MustCompile(`\[\[(.*?)(?:\|(.*?))?\]\]`)
 var refTagRegex = regexp.MustCompile(`\{\{ref:(.*?)#(.*?)\}\}`)
 
 func main() {
-	fmt.Println("--- BUILDING WITH LINEICONS ---")
+	fmt.Println("--- BUILDING OPTIMIZED SITE ---")
 
 	if _, err := os.Stat(InputDir); os.IsNotExist(err) {
 		fmt.Println("Error: 'content' folder missing.")
@@ -196,7 +196,7 @@ func main() {
 		markdown.Renderer().Render(&buf, source, doc)
 		htmlContent := buf.String()
 
-		// Wiki Links
+		// Wiki Links (Updated: Removed hover:underline)
 		htmlContent = wikiLinkRegex.ReplaceAllStringFunc(htmlContent, func(match string) string {
 			inner := match[2 : len(match)-2]
 			parts := strings.SplitN(inner, "|", 2)
@@ -208,7 +208,7 @@ func main() {
 			if !strings.HasPrefix(linkSlug, "/") {
 				linkSlug = "/" + linkSlug
 			}
-			return fmt.Sprintf(`<a href="#%s" class="text-blue-600 dark:text-blue-400 hover:underline">%s</a>`, linkSlug, linkText)
+			return fmt.Sprintf(`<a href="#%s" class="text-blue-600 dark:text-blue-400 font-medium transition-colors hover:text-blue-800 dark:hover:text-blue-300">%s</a>`, linkSlug, linkText)
 		})
 
 		// Ref Tags
@@ -287,7 +287,19 @@ func addToTree(nodes []*MenuItem, parts []string, slug, finalTitle string, weigh
 		nodes = append(nodes, newNode)
 		foundNode = newNode
 
+		// SORT LOGIC UPDATE:
+		// 1. Home (/) always first
+		// 2. Weight (Lowest first)
+		// 3. Folders first
+		// 4. Alphabetical
 		sort.Slice(nodes, func(i, j int) bool {
+			if nodes[i].Slug == "/" {
+				return true
+			}
+			if nodes[j].Slug == "/" {
+				return false
+			}
+
 			if nodes[i].Weight != nodes[j].Weight {
 				return nodes[i].Weight < nodes[j].Weight
 			}
@@ -334,7 +346,6 @@ func writeAppShell(path string) {
     <meta name="description" content="Documentation">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.lineicons.com/4.0/lineicons.css" />
-    
     <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
     <script>
         tailwind.config = { 
@@ -348,9 +359,7 @@ func writeAppShell(path string) {
         .admonition { border-left-width: 4px; padding: 1rem; margin-bottom: 1.5rem; border-radius: 0.375rem; background-color: #f9fafb; }
         .dark .admonition { background-color: #1f2937; }
         .admonition-title { font-weight: 700; margin-bottom: 0.5rem; display: flex; align-items: center; }
-        /* Font icon size for Admonitions */
         .admonition-title i { font-size: 1.25rem; margin-right: 0.5rem; }
-        
         .admonition-note { border-color: #3b82f6; } .admonition-note .admonition-title { color: #2563eb; }
         .admonition-tip { border-color: #10b981; } .admonition-tip .admonition-title { color: #059669; }
         .admonition-warning { border-color: #f59e0b; } .admonition-warning .admonition-title { color: #d97706; }
@@ -522,6 +531,8 @@ func writeAppShell(path string) {
                     if (!props.flatMenu || props.flatMenu.length === 0) return { prev: null, next: null };
                     const currentIndex = props.flatMenu.findIndex(p => p.slug === route.path);
                     if (currentIndex === -1) return { prev: null, next: null };
+                    
+                    // Logic updated: Home (index 0) gets no Prev. Last gets no Next.
                     return {
                         prev: currentIndex > 0 ? props.flatMenu[currentIndex - 1] : null,
                         next: currentIndex < props.flatMenu.length - 1 ? props.flatMenu[currentIndex + 1] : null
@@ -603,14 +614,14 @@ func writeAppShell(path string) {
                 '<div class="mt-16 pt-8 border-t border-gray-100 dark:border-gray-800 flex flex-col md:flex-row justify-between gap-4">' +
                     '<div v-if="navLinks.prev">' +
                         '<div class="text-xs text-gray-500 mb-1">Previous</div>' +
-                        '<router-link :to="navLinks.prev.slug" class="text-blue-600 dark:text-blue-400 font-medium hover:underline flex items-center">' +
+                        '<router-link :to="navLinks.prev.slug" class="text-blue-600 dark:text-blue-400 font-medium transition-colors hover:text-blue-800 dark:hover:text-blue-300 flex items-center">' +
                             '<i class="lni lni-arrow-left mr-2"></i> {{ navLinks.prev.title }}' +
                         '</router-link>' +
                     '</div>' +
                     '<div v-else class="flex-1"></div>' +
                     '<div v-if="navLinks.next" class="text-right">' +
                         '<div class="text-xs text-gray-500 mb-1">Next</div>' +
-                        '<router-link :to="navLinks.next.slug" class="text-blue-600 dark:text-blue-400 font-medium hover:underline flex items-center justify-end">' +
+                        '<router-link :to="navLinks.next.slug" class="text-blue-600 dark:text-blue-400 font-medium transition-colors hover:text-blue-800 dark:hover:text-blue-300 flex items-center justify-end">' +
                             '{{ navLinks.next.title }} <i class="lni lni-arrow-right ml-2"></i>' +
                         '</router-link>' +
                     '</div>' +
@@ -620,7 +631,7 @@ func writeAppShell(path string) {
 
         const SitemapView = {
             props: ['menu'],
-            template: '<div><h1 class="text-4xl font-bold mb-8 dark:text-white">Site Index</h1><div class="grid grid-cols-1 md:grid-cols-2 gap-8"><div v-for="item in menu" :key="item.title"><h3 class="font-bold text-lg mb-2 text-slate-800 dark:text-gray-200">{{ item.title }}</h3><ul class="space-y-1"><li v-if="!item.is_folder"><router-link :to="item.slug" class="text-blue-600 dark:text-blue-400 hover:underline">{{ item.title }}</router-link></li><li v-else v-for="child in item.children" :key="child.title" class="ml-4 list-disc marker:text-slate-300 dark:marker:text-gray-600"><router-link :to="child.slug" class="text-blue-600 dark:text-blue-400 hover:underline">{{ child.title }}</router-link></li></ul></div></div></div>'
+            template: '<div><h1 class="text-4xl font-bold mb-8 dark:text-white">Site Index</h1><div class="grid grid-cols-1 md:grid-cols-2 gap-8"><div v-for="item in menu" :key="item.title"><h3 class="font-bold text-lg mb-2 text-slate-800 dark:text-gray-200">{{ item.title }}</h3><ul class="space-y-1"><li v-if="!item.is_folder"><router-link :to="item.slug" class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">{{ item.title }}</router-link></li><li v-else v-for="child in item.children" :key="child.title" class="ml-4 list-disc marker:text-slate-300 dark:marker:text-gray-600"><router-link :to="child.slug" class="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">{{ child.title }}</router-link></li></ul></div></div></div>'
         };
 
         const app = createApp({
