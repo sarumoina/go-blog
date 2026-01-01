@@ -25,7 +25,7 @@ import (
 const (
 	InputDir  = "./content"
 	OutputDir = "./public"
-	BaseURL   = "https://mysite.com" // Update this for sitemap
+	BaseURL   = "https://mysite.com"
 )
 
 type SiteData struct {
@@ -56,10 +56,14 @@ type TOCEntry struct {
 	Level int    `json:"level"`
 }
 
-var htmlTagRegex = regexp.MustCompile(`<[^>]*>`)
+// Regex for [[slug|text]] or [[slug]]
+var wikiLinkRegex = regexp.MustCompile(`\[\[(.*?)(?:\|(.*?))?\]\]`)
+
+// Regex for {{ref:slug#id}}
+var refTagRegex = regexp.MustCompile(`\{\{ref:(.*?)#(.*?)\}\}`)
 
 func main() {
-	fmt.Println("--- BUILDING FEATURE-PACKED SITE ---")
+	fmt.Println("--- BUILDING WITH REFS & WIKI LINKS ---")
 
 	if _, err := os.Stat(InputDir); os.IsNotExist(err) {
 		fmt.Println("Error: 'content' folder missing.")
@@ -68,8 +72,6 @@ func main() {
 	os.RemoveAll(OutputDir)
 	os.Mkdir(OutputDir, 0755)
 
-	// Note: We use "dracula" style. In Dark mode it fits perfectly.
-	// In Light mode, it still looks good as a contrast block.
 	markdown := goldmark.New(
 		goldmark.WithExtensions(
 			extension.GFM,
@@ -181,10 +183,55 @@ func main() {
 
 		var buf bytes.Buffer
 		markdown.Renderer().Render(&buf, source, doc)
+		htmlContent := buf.String()
+
+		// --- PROCESS CUSTOM SHORTCODES ---
+
+		// 1. Process Wiki Links: [[slug]] or [[slug|text]]
+		htmlContent = wikiLinkRegex.ReplaceAllStringFunc(htmlContent, func(match string) string {
+			// Strip brackets
+			inner := match[2 : len(match)-2]
+			parts := strings.SplitN(inner, "|", 2)
+			linkSlug := strings.TrimSpace(parts[0])
+			linkText := linkSlug
+
+			if len(parts) > 1 {
+				linkText = strings.TrimSpace(parts[1])
+			}
+
+			// Ensure slug starts with / if it's not root
+			if !strings.HasPrefix(linkSlug, "/") {
+				linkSlug = "/" + linkSlug
+			}
+
+			// Create Vue-compatible Hash link
+			return fmt.Sprintf(`<a href="#%s" class="text-blue-600 dark:text-blue-400 hover:underline">%s</a>`, linkSlug, linkText)
+		})
+
+		// 2. Process Ref Tags: {{ref:slug#id}}
+		// We replace this with a placeholder div that Vue will find and populate
+		htmlContent = refTagRegex.ReplaceAllStringFunc(htmlContent, func(match string) string {
+			// Strip brackets {{ref: ... }}
+			inner := match[6 : len(match)-2]
+			parts := strings.SplitN(inner, "#", 2)
+			if len(parts) != 2 {
+				return `<span class="text-red-500">[Invalid Ref: ` + inner + `]</span>`
+			}
+			refSlug := strings.TrimSpace(parts[0])
+			refID := strings.TrimSpace(parts[1])
+
+			if !strings.HasPrefix(refSlug, "/") {
+				refSlug = "/" + refSlug
+			}
+
+			return fmt.Sprintf(`<div class="transclusion-placeholder p-4 border-l-4 border-purple-500 bg-gray-50 dark:bg-gray-800 my-4" data-slug="%s" data-id="%s"><span class="text-gray-400 text-sm animate-pulse">Loading referenced content...</span></div>`, refSlug, refID)
+		})
+
+		// --- END SHORTCODES ---
 
 		site.Pages[slug] = PageData{
 			Title:       title,
-			Content:     buf.String(),
+			Content:     htmlContent,
 			TOC:         toc,
 			Published:   published,
 			Updated:     updated,
@@ -271,10 +318,6 @@ func generateXMLSitemap(slugs []string) {
 }
 
 func writeAppShell(path string) {
-	// FIX APPLIED:
-	// 1. Added 'filteredMenu' computed property to safely remove the Home link.
-	// 2. Updated HTML loop to use 'filteredMenu' instead of 'menu'.
-	// 3. Removed the conflicting 'v-if' from the HTML tag.
 	const html = `<!DOCTYPE html>
 <html lang="en" class="light">
 <head>
@@ -317,6 +360,9 @@ func writeAppShell(path string) {
             border-radius: 0.25rem; color: #fff; cursor: pointer; opacity: 0; transition: opacity 0.2s;
         }
         .code-wrapper:hover .copy-btn { opacity: 1; }
+        
+        /* Ref Link Styles */
+        .transclusion-placeholder h1, .transclusion-placeholder h2, .transclusion-placeholder h3 { margin-top: 0 !important; font-size: 1.2em; }
 
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
@@ -447,6 +493,8 @@ func writeAppShell(path string) {
                 const processedContent = computed(() => {
                     if (!props.data.content) return '';
                     let html = props.data.content;
+                    
+                    // Admonitions
                     const regex = /<blockquote>\s*<p>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*?)<\/p>\s*(.*?)<\/blockquote>/gs;
                     html = html.replace(regex, (match, type, titleLine, body) => {
                         const typeLower = type.toLowerCase();
@@ -458,8 +506,11 @@ func writeAppShell(path string) {
                     });
                     return html;
                 });
-                onMounted(() => injectCopyButtons());
-                watch(() => props.data.content, () => nextTick(injectCopyButtons));
+
+                // Run side-effects (Copy Buttons & Transclusions)
+                onMounted(() => { injectCopyButtons(); resolveTransclusions(); });
+                watch(() => props.data.content, () => nextTick(() => { injectCopyButtons(); resolveTransclusions(); }));
+
                 function injectCopyButtons() {
                     document.querySelectorAll('pre').forEach(pre => {
                         if (pre.parentNode.classList.contains('code-wrapper')) return;
@@ -479,6 +530,55 @@ func writeAppShell(path string) {
                         wrapper.appendChild(btn);
                     });
                 }
+
+                // --- TRANSCLUSION LOGIC ---
+                function resolveTransclusions() {
+                    const placeholders = document.querySelectorAll('.transclusion-placeholder');
+                    if (placeholders.length === 0) return;
+
+                    placeholders.forEach(el => {
+                        const slug = el.getAttribute('data-slug');
+                        const id = el.getAttribute('data-id');
+                        
+                        // Check if page exists in siteData
+                        if (window.siteData && window.siteData.pages[slug]) {
+                            const rawHtml = window.siteData.pages[slug].content;
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = rawHtml;
+                            
+                            const startNode = tempDiv.querySelector('#' + id);
+                            
+                            if (startNode) {
+                                // Extract content: Start at header, grab siblings until next header of same or higher level
+                                let content = '';
+                                const startLevel = parseInt(startNode.tagName.substring(1)); // e.g., H2 -> 2
+                                
+                                let currentNode = startNode;
+                                // Add the header itself? Usually yes, or maybe not. Let's include it.
+                                content += currentNode.outerHTML; 
+                                
+                                while (currentNode.nextElementSibling) {
+                                    currentNode = currentNode.nextElementSibling;
+                                    const tagName = currentNode.tagName;
+                                    // Check if it is a header
+                                    if (/^H[1-6]$/.test(tagName)) {
+                                        const currentLevel = parseInt(tagName.substring(1));
+                                        if (currentLevel <= startLevel) break; // Stop if same or higher level
+                                    }
+                                    content += currentNode.outerHTML;
+                                }
+                                el.innerHTML = content;
+                                el.classList.remove('animate-pulse');
+                                el.classList.add('bg-opacity-50'); // style tweak
+                            } else {
+                                el.innerHTML = '<span class="text-red-500 text-sm">Error: Section #'+id+' not found in '+slug+'</span>';
+                            }
+                        } else {
+                            el.innerHTML = '<span class="text-red-500 text-sm">Error: Page '+slug+' not found</span>';
+                        }
+                    });
+                }
+
                 return { processedContent };
             },
             template: '<div>' +
@@ -509,7 +609,6 @@ func writeAppShell(path string) {
                 const mainScroll = ref(null);
                 const isDark = ref(localStorage.getItem('theme') === 'dark');
                 
-                // Computed property to filter out Home link safely
                 const filteredMenu = computed(() => {
                     return menu.value.filter(item => item.slug !== '/');
                 });

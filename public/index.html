@@ -40,6 +40,9 @@
             border-radius: 0.25rem; color: #fff; cursor: pointer; opacity: 0; transition: opacity 0.2s;
         }
         .code-wrapper:hover .copy-btn { opacity: 1; }
+        
+        /* Ref Link Styles */
+        .transclusion-placeholder h1, .transclusion-placeholder h2, .transclusion-placeholder h3 { margin-top: 0 !important; font-size: 1.2em; }
 
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
@@ -170,6 +173,8 @@
                 const processedContent = computed(() => {
                     if (!props.data.content) return '';
                     let html = props.data.content;
+                    
+                    // Admonitions
                     const regex = /<blockquote>\s*<p>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*?)<\/p>\s*(.*?)<\/blockquote>/gs;
                     html = html.replace(regex, (match, type, titleLine, body) => {
                         const typeLower = type.toLowerCase();
@@ -181,8 +186,11 @@
                     });
                     return html;
                 });
-                onMounted(() => injectCopyButtons());
-                watch(() => props.data.content, () => nextTick(injectCopyButtons));
+
+                // Run side-effects (Copy Buttons & Transclusions)
+                onMounted(() => { injectCopyButtons(); resolveTransclusions(); });
+                watch(() => props.data.content, () => nextTick(() => { injectCopyButtons(); resolveTransclusions(); }));
+
                 function injectCopyButtons() {
                     document.querySelectorAll('pre').forEach(pre => {
                         if (pre.parentNode.classList.contains('code-wrapper')) return;
@@ -202,6 +210,55 @@
                         wrapper.appendChild(btn);
                     });
                 }
+
+                // --- TRANSCLUSION LOGIC ---
+                function resolveTransclusions() {
+                    const placeholders = document.querySelectorAll('.transclusion-placeholder');
+                    if (placeholders.length === 0) return;
+
+                    placeholders.forEach(el => {
+                        const slug = el.getAttribute('data-slug');
+                        const id = el.getAttribute('data-id');
+                        
+                        // Check if page exists in siteData
+                        if (window.siteData && window.siteData.pages[slug]) {
+                            const rawHtml = window.siteData.pages[slug].content;
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = rawHtml;
+                            
+                            const startNode = tempDiv.querySelector('#' + id);
+                            
+                            if (startNode) {
+                                // Extract content: Start at header, grab siblings until next header of same or higher level
+                                let content = '';
+                                const startLevel = parseInt(startNode.tagName.substring(1)); // e.g., H2 -> 2
+                                
+                                let currentNode = startNode;
+                                // Add the header itself? Usually yes, or maybe not. Let's include it.
+                                content += currentNode.outerHTML; 
+                                
+                                while (currentNode.nextElementSibling) {
+                                    currentNode = currentNode.nextElementSibling;
+                                    const tagName = currentNode.tagName;
+                                    // Check if it is a header
+                                    if (/^H[1-6]$/.test(tagName)) {
+                                        const currentLevel = parseInt(tagName.substring(1));
+                                        if (currentLevel <= startLevel) break; // Stop if same or higher level
+                                    }
+                                    content += currentNode.outerHTML;
+                                }
+                                el.innerHTML = content;
+                                el.classList.remove('animate-pulse');
+                                el.classList.add('bg-opacity-50'); // style tweak
+                            } else {
+                                el.innerHTML = '<span class="text-red-500 text-sm">Error: Section #'+id+' not found in '+slug+'</span>';
+                            }
+                        } else {
+                            el.innerHTML = '<span class="text-red-500 text-sm">Error: Page '+slug+' not found</span>';
+                        }
+                    });
+                }
+
                 return { processedContent };
             },
             template: '<div>' +
@@ -232,7 +289,6 @@
                 const mainScroll = ref(null);
                 const isDark = ref(localStorage.getItem('theme') === 'dark');
                 
-                // Computed property to filter out Home link safely
                 const filteredMenu = computed(() => {
                     return menu.value.filter(item => item.slug !== '/');
                 });

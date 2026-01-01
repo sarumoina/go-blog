@@ -6,12 +6,22 @@
     <changefreq>weekly</changefreq>
   </url>
   <url>
+    <loc>https://mysite.com/#/guide</loc>
+    <lastmod>2026-01-01</lastmod>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
     <loc>https://mysite.com/</loc>
     <lastmod>2026-01-01</lastmod>
     <changefreq>weekly</changefreq>
   </url>
   <url>
     <loc>https://mysite.com/#/vps/formatting-the-disk</loc>
+    <lastmod>2026-01-01</lastmod>
+    <changefreq>weekly</changefreq>
+  </url>
+  <url>
+    <loc>https://mysite.com/#/vps/mounting-the-disk</loc>
     <lastmod>2026-01-01</lastmod>
     <changefreq>weekly</changefreq>
   </url>
