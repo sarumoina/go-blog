@@ -60,7 +60,7 @@ This is a powerful feature that allows you to **embed a section from one page in
 Below this line, we are fetching the **"Admonitions"** section from *this very page* (referencing itself) to demonstrate.
 
 **The Result:**
-{{ref:formatting-the-disk#step-2-edit-etcfstab}}
+{{ref:vps/formatting-the-disk#step-2-edit-etcfstab}}
 
 > [!NOTE]
 > The content above was dynamically fetched! You can reference any page in your `content` folder.
