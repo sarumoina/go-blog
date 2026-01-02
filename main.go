@@ -446,12 +446,22 @@ func writeAppShell(path string) {
 
             <div v-else class="flex-1 overflow-hidden flex">
                 <main class="flex-1 overflow-y-auto p-8 lg:p-12 scroll-smooth" ref="mainScroll">
-                    <div class="max-w-3xl mx-auto">
-                        <router-view v-slot="{ Component }">
-                            <transition name="fade" mode="out-in">
-                                <component :is="Component" :data="currentPage" :menu="menu" :flat-menu="flatMenu" />
-                            </transition>
-                        </router-view>
+                    <div class="max-w-3xl mx-auto flex flex-col min-h-[calc(100vh-8rem)]">
+                        <div class="flex-1">
+                            <router-view v-slot="{ Component }">
+                                <transition name="fade" mode="out-in">
+                                    <component :is="Component" :data="currentPage" :menu="menu" :flat-menu="flatMenu" />
+                                </transition>
+                            </router-view>
+                        </div>
+                        <footer class="mt-16 pt-8 border-t border-gray-100 dark:border-gray-800 text-center text-sm text-gray-400 dark:text-gray-600">
+                            <div class="mb-2">
+                                <router-link to="/sitemap" class="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">Sitemap</router-link>
+                            </div>
+                            <div>
+                                Powered by &copy; {{ new Date().getFullYear() }}
+                            </div>
+                        </footer>
                     </div>
                 </main>
                 <aside v-if="currentPage.toc && currentPage.toc.length > 0" class="hidden xl:block w-64 border-l border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900 flex-shrink-0 overflow-y-auto p-8">
