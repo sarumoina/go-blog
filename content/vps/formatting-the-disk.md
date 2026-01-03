@@ -3,6 +3,7 @@ title: Formatting the disk
 published on: 2026-01-01
 updated on: 2026-01-01
 category: vps
+weight: 1
 ---
 
 ## Step 1: Create the mount point
