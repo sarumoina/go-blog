@@ -1,6 +1,6 @@
 @echo off
 echo --- GENERATING SITE ---
-go run main.go
+go run .
 
 echo.
 echo --- PUSHING TO GITHUB ---
